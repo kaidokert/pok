@@ -37,9 +37,13 @@ my @cflags =
 (
  "-W",
  "-Wall",
- "-g",
- "-m32"
- );
+ "-g"
+);
+
+# Add -m32 only for non-ARM architectures
+if (!defined $ENV{'ARCH'} || $ENV{'ARCH'} ne "arm") {
+    push @cflags, "-m32";
+}
 
 my @ldflags =
 (
@@ -67,6 +71,20 @@ my %tools_common =
  );
 
 my %tools_arch;
+# ARM toolchain configuration - REQUIRE real cross-toolchain, no host fallbacks
+# Host tools (gcc, ld, objdump, etc.) are removed to prevent incorrect architecture builds
+$tools_arch{"arm"} =
+{
+ "AR" 	      =>  ["arm-none-eabi-ar", "arm-elf-ar"],
+ "CC"          =>  ["arm-none-eabi-gcc", "arm-elf-gcc"],
+ "CXX"	      =>  ["arm-none-eabi-g++", "arm-elf-g++"],
+ "LD"	         =>  ["arm-none-eabi-ld", "arm-elf-ld"],
+ "OBJDUMP"     =>  ["arm-none-eabi-objdump", "arm-elf-objdump"],
+ "OBJCOPY"     =>  ["arm-none-eabi-objcopy", "arm-elf-objcopy"],
+ "RANLIB"      =>  ["arm-none-eabi-ranlib", "arm-elf-ranlib"],
+ "QEMU"        =>  ["qemu-system-arm", "arm-softmmu"],
+ };
+
 $tools_arch{"x86"} =
 {
  "AR" 	      =>  ["i386-unknown-linux-gnu-ar.exe", "i386-elf-ar" , "ar"],
@@ -152,7 +170,7 @@ my %colors =
       chomp ($line);
 
       ($version) =($line =~ /^[a-zA-Z]+\s([\.0-9a-zA-Z]+)\s.*$/);
-     
+
       if ( "$version" ne "$OCARINA_VERSION")
       {
          print $colors{"RED"}."WARNING: POK required Ocarina version $OCARINA_VERSION, incorrect version \n".$colors{"STD"};
@@ -283,13 +301,34 @@ my %colors =
 
       close (FIC);
 
-      if ($sys_kind =~ /FreeBSD/ )
-      {
-         $makevars{'ELF_MODE'} = "elf_i386_fbsd";
+      # Set ELF_MODE based on configured architectures
+      # Support multi-arch setups by checking ARCH environment variable first
+      if (defined($ENV{'ARCH'})) {
+         if ($ENV{'ARCH'} eq "arm") {
+            $makevars{'ELF_MODE'} = "armelf";
+         } elsif ($ENV{'ARCH'} eq "x86") {
+            if ($sys_kind =~ /FreeBSD/) {
+               $makevars{'ELF_MODE'} = "elf_i386_fbsd";
+            } else {
+               $makevars{'ELF_MODE'} = "elf_i386";
+            }
+         } else {
+            my $unsupported_arch = $ENV{'ARCH'};
+            print $colors{"YELLOW"}." warning: unsupported ARCH='$unsupported_arch', falling back to default detection".$colors{"STD"};
+            undef($ENV{'ARCH'}); # Clear ARCH to trigger fallback logic
+         }
       }
-      else
-      {
-         $makevars{'ELF_MODE'} = "elf_i386";
+
+      # Fallback: Set based on available toolchains if no ARCH or unsupported ARCH
+      if (!defined($ENV{'ARCH'})) {
+         # Default to x86 for backward compatibility
+         if (exists $makevars{'CC_arm'}) {
+            $makevars{'ELF_MODE'} = "armelf";
+         } elsif ($sys_kind =~ /FreeBSD/ ) {
+            $makevars{'ELF_MODE'} = "elf_i386_fbsd";
+         } else {
+            $makevars{'ELF_MODE'} = "elf_i386";
+         }
       }
       print $colors{"GREEN"}." ok\n".$colors{"STD"};
    }
@@ -347,13 +386,13 @@ my %colors =
 
 	sub check_libxml
 	{
-		my $ret = system ("perl -e 'use XML::LibXML;' >/dev/null 2>&1");  
+		my $ret = system ("perl -e 'use XML::LibXML;' >/dev/null 2>&1");
 		if ($ret != 0)
 		{
 			printf "XML::LibXML (Perl XML/LibXML library) not installed, please install it\n";
 			exit 1;
 		}
-			
+
 	}
 
 
@@ -382,19 +421,19 @@ my %colors =
 
    if ($use_floppy == 1)
    {
-      $tools_arch{"x86"}{"MCOPY"} = [ "mcopy"]; 
-      $tools_arch{"x86"}{"MMD"} = [ "mmd"]; 
+      $tools_arch{"x86"}{"MCOPY"} = [ "mcopy"];
+      $tools_arch{"x86"}{"MMD"} = [ "mmd"];
    }
 
    if ($use_xcov == 1)
    {
-      $tools_common{"XCOV"} = [ "xcov"]; 
+      $tools_common{"XCOV"} = [ "xcov"];
    }
 
 
    if ($use_spoq == 1)
    {
-      $tools_arch{"x86"}{"QEMU"} = [ "qemu-spoqed"]; 
+      $tools_arch{"x86"}{"QEMU"} = [ "qemu-spoqed"];
    }
 
 
@@ -403,12 +442,12 @@ my %colors =
 
    my $nb_arch = 0;
 
-   for my $v ("x86", "ppc", "sparc")
+   for my $v ("arm", "x86", "ppc", "sparc")
    {
-      
+
       if (check_arch_tools ($v) == 0)
       {
-         $nb_arch++; 
+         $nb_arch++;
       }
    }
 
@@ -421,13 +460,13 @@ my %colors =
 
    concat_flags ("CONFIG_CFLAGS", @cflags);
    concat_flags ("CONFIG_LDFLAGS", @ldflags);
-   
+
    if ($sys_kind =~ /CYGWIN/ )
    {
       my $tmp_path = `cygpath.exe -d $ENV{PWD}/misc/grub-boot-only.img`;
       chomp ($tmp_path);
       $tmp_path =~ s/\\/\\\\/g;
-      
+
       my $tmp_path2 = `cygpath.exe -d $ENV{PWD}/toolchain/qemu`;
       chomp ($tmp_path2);
       $tmp_path2 =~ s/\\/\\\\/g;
@@ -438,8 +477,8 @@ my %colors =
    {
       $makevars{'CONFIG_QEMU_x86'} = " -fda grub-boot-only.img ";
    }
-   
- 
+
+
    if ($use_instrumentation == 1)
    {
    	print $colors{"GREEN"}."Set instrumentation flag\n".$colors{"STD"};
@@ -453,9 +492,9 @@ my %colors =
 
    if ($use_spoq == 1)
    {
-      $makevars{"SPOQ"} = "1"; 
+      $makevars{"SPOQ"} = "1";
    }
-  
+
    create_env ();
 
    check_ocarina ();
@@ -465,4 +504,3 @@ my %colors =
    print $colors{"GREEN"}."DONE !\n".$colors{"STD"};
 
 # }} Main
-
