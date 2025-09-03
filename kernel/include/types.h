@@ -19,6 +19,8 @@
 #include <arch/sparc/types.h>
 #elif POK_ARCH == x86
 #include <arch/x86/types.h>
+#elif defined(POK_ARCH_ARM) || defined(POK_ARCH_CORTEX_M)
+#include <arch/arm/types.h>
 #endif
 
 #define NULL 0
