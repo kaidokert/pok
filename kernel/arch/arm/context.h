@@ -1,0 +1,22 @@
+/*
+ *                               POK header
+ *
+ * The following file is a part of the POK project. Any modification should
+ * be made according to the POK licence. You CANNOT use this file or a part
+ * of a file for your own project.
+ *
+ * For more information on the POK licence, please see our LICENCE FILE
+ *
+ * Please follow the coding guidelines described in doc/CODING_GUIDELINES
+ *
+ *                                      Copyright (c) 2007-2025 POK team
+ */
+
+#ifndef __POK_ARM_CONTEXT_H__
+#define __POK_ARM_CONTEXT_H__
+/*
+ * Reserved for ARM context structures/APIs (see thread.h). Intentionally empty
+ * for now. Add only forward decls and shared definitions to avoid circular
+ * includes.
+ */
+#endif /* __POK_ARM_CONTEXT_H__ */

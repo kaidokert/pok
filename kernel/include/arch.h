@@ -44,7 +44,7 @@ pok_ret_t pok_arch_preempt_enable();
 /**
  * Function that do nothing. Useful for the idle task for example.
  */
-pok_ret_t pok_arch_idle();
+pok_ret_t pok_arch_idle(void);
 
 /**
  * Register an event (for example, an interruption)
@@ -115,6 +115,10 @@ __attribute__((noreturn)) void pok_division_by_zero_error(void);
 
 #ifdef POK_ARCH_SPARC
 #include <arch/sparc/spinlock.h>
+#endif
+
+#ifdef POK_ARCH_ARM
+/* ARM-specific includes can be added here if needed */
 #endif
 
 #endif /* !__POK_ARCH_H__ */

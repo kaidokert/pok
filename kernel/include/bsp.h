@@ -24,23 +24,31 @@
 
 #include <errno.h>
 #include <types.h>
-
-pok_ret_t pok_bsp_init();
+#include <stdint.h>
+pok_ret_t pok_bsp_init(void);
 
 pok_ret_t pok_bsp_irq_acknowledge(uint8_t irq);
 
 pok_ret_t pok_bsp_irq_register(uint8_t irq, void (*handler)(void));
 
 void *pok_bsp_mem_alloc(size_t size);
+void pok_bsp_mem_free(void *ptr, size_t size);
 
-pok_ret_t pok_bsp_time_init();
+uintptr_t pok_bsp_mem_base(void);
+size_t pok_bsp_mem_size(void);
+uintptr_t pok_bsp_kernel_base(void);
+size_t pok_bsp_kernel_size(void);
 
-bool_t pok_cons_write(const char *s, size_t length);
+pok_ret_t pok_bsp_time_init(void);
+
+pok_bool_t pok_cons_write(const char *s, size_t length);
+pok_ret_t pok_cons_read(char *s, size_t length);
 
 void pok_cons_get_char(char *c);
 
 #ifdef POK_NEEDS_DEBUG
-void pok_bsp_debug();
+void pok_bsp_debug(void);
+void pok_bsp_debug_monitor(void);
 #endif
 
 #endif /* !BSP_H_ */
