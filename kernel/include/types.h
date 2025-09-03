@@ -15,9 +15,11 @@
 #ifndef __POK_TYPES_H__
 #define __POK_TYPES_H__
 
-#ifdef POK_ARCH_SPARC
+#if defined(POK_ARCH_SPARC)
 #include <arch/sparc/types.h>
-#elif POK_ARCH == x86
+#elif defined(POK_ARCH_ARM) || defined(POK_ARCH_CORTEX_M)
+#include <arch/arm/types.h>
+#elif defined(POK_ARCH_X86)
 #include <arch/x86/types.h>
 #endif
 
