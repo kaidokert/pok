@@ -10,19 +10,20 @@ MEMORY
 {
   FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 1024K
   SRAM (rwx)  : ORIGIN = 0x20000000, LENGTH = 128K
+  CCMSRAM (rw) : ORIGIN = 0x10000000, LENGTH = 64K  /* Core Coupled Memory for DMA-free data */
 }
 
 /* Stack size definitions */
-_stack_size = 0x400;  /* 1KB stack */
+_stack_size = 0x1000;  /* 4KB stack - sufficient for ISR nesting, printf, context frames */
 
 SECTIONS
 {
-  /* Vector table goes to flash */
+  /* Vector table goes to flash - must be 0x200 (512) byte aligned for proper VTOR operation */
   .isr_vector :
   {
-    . = ALIGN(4);
+    . = ALIGN(0x200);
     KEEP(*(.isr_vector))
-    . = ALIGN(4);
+    . = ALIGN(8);
   } >FLASH
 
   /* Program code and constants */
@@ -53,11 +54,11 @@ SECTIONS
   /* Initialized data (copied from flash to RAM at startup) */
   .data : 
   {
-    . = ALIGN(4);
+    . = ALIGN(8);
     _sdata = .;
     *(.data)
     *(.data*)
-    . = ALIGN(4);
+    . = ALIGN(8);
     _edata = .;
   } >SRAM AT >FLASH
   
@@ -66,12 +67,12 @@ SECTIONS
   /* Uninitialized data (zero-initialized) */
   .bss :
   {
-    . = ALIGN(4);
+    . = ALIGN(8);
     _sbss = .;
     *(.bss)
     *(.bss*)
     *(COMMON)
-    . = ALIGN(4);
+    . = ALIGN(8);
     _ebss = .;
   } >SRAM
 
@@ -84,15 +85,27 @@ SECTIONS
     _estack = .;
   } >SRAM
 
+  /* CCM SRAM section - fast access memory not accessible by DMA */
+  .ccmsram (NOLOAD) :
+  {
+    . = ALIGN(8);
+    _sccmsram = .;
+    *(.ccmsram)
+    *(.ccmsram*)
+    . = ALIGN(8);
+    _eccmsram = .;
+  } >CCMSRAM
+
   /* Heap (optional, after BSS) */
   _end = .;
   PROVIDE(end = .);
   
-  /* Remove debugging sections */
+  /* Remove specific debugging sections instead of entire libraries */
   /DISCARD/ :
   {
-    libc.a ( * )
-    libm.a ( * )
-    libgcc.a ( * )
+    *(.comment)
+    *(.debug*)
+    *(.note*)
+    *(.eh_frame*)
   }
 }

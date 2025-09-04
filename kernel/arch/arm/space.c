@@ -18,20 +18,26 @@
  * \author  POK team
  */
 
-#include <bsp.h>
-#include <core/sched.h>
+/* POK system headers */
 #include <errno.h>
 #include <libc.h>
 #include <types.h>
 
+/* POK core headers */
+#include <bsp.h>
+#include <core/sched.h>
+
+/* Architecture-specific headers */
+#include "arch.h"
 #include "mpu.h"
 #include "thread.h"
-#include <arch.h>
 
 #define KERNEL_STACK_SIZE 4096
 #define MPU_MIN_REGION_SIZE 32
 #define MEMORY_WASTE_THRESHOLD_PERCENT 25
-#define STACK_ALIGNMENT_MASK 0x7u
+#define MEMORY_WASTE_CRITICAL_PERCENT 50  /* Fail allocation if waste exceeds this */
+#define STACK_ALIGNMENT_BYTES 8  /* ARM Cortex-M requires 8-byte stack alignment */
+#define STACK_ALIGNMENT_MASK (STACK_ALIGNMENT_BYTES - 1)
 
 /* Partition space information */
 struct pok_space {
@@ -55,14 +61,14 @@ pok_ret_t pok_create_space(uint8_t partition_id, uint32_t addr, uint32_t size) {
   uint8_t region_id;
 
   if (partition_id >= POK_CONFIG_NB_PARTITIONS) {
-    return (POK_ERRNO_EINVAL);
+    return POK_ERRNO_EINVAL;
   }
 
   /* Use partition_id + 1 as region ID (reserve region 0 for kernel) */
   region_id = partition_id + 1;
 
   if (region_id >= pok_mpu_get_region_count()) {
-    return (POK_ERRNO_EINVAL);
+    return POK_ERRNO_EINVAL;
   }
 
   /* Configure MPU attributes for partition space - enforce W^X principle:
@@ -71,9 +77,8 @@ pok_ret_t pok_create_space(uint8_t partition_id, uint32_t addr, uint32_t size) {
    * - Normal memory with caching
    * Note: This creates a data region first, code region will be separate
    */
-  mpu_attributes = (MPU_AP_ALL_RW << MPU_RASR_AP_SHIFT) | MPU_ATTR_NORMAL;
-  /* Remove execute permission for data regions */
-  mpu_attributes |= MPU_RASR_XN;
+  /* Use helper macro for partition data region (read-write, no execute) */
+  mpu_attributes = MPU_CONFIG_SRAM_DATA;
 
   /* Align size to power of 2 (MPU requirement) */
   uint32_t aligned_size;
@@ -87,13 +92,28 @@ pok_ret_t pok_create_space(uint8_t partition_id, uint32_t addr, uint32_t size) {
     }
   }
 
-  /* Security check: warn if alignment exposes significant unused memory */
+  /* Security fix: clear exposed memory due to MPU alignment */
   uint32_t exposed_memory = aligned_size - size;
-  if (exposed_memory > (size / (100 / MEMORY_WASTE_THRESHOLD_PERCENT))) {
+  if (exposed_memory > 0) {
+    /* Check if memory waste exceeds critical threshold */
+    uint32_t waste_percent = (exposed_memory * 100) / size;
+    if (waste_percent > MEMORY_WASTE_CRITICAL_PERCENT) {
 #ifdef POK_NEEDS_DEBUG
-    printf("WARNING: Partition %d MPU alignment exposes %u bytes of unused "
-           "memory\n",
-           partition_id, exposed_memory);
+      printf("ERROR: Partition %d MPU alignment wastes %u%% memory (%u bytes) - exceeds %u%% limit\n",
+             partition_id, waste_percent, exposed_memory, MEMORY_WASTE_CRITICAL_PERCENT);
+#endif
+      return POK_ERRNO_EINVAL;
+    }
+    
+    /* Clear exposed memory to prevent information disclosure */
+    void *exposed_start = (void *)(addr + size);
+    memset(exposed_start, 0, exposed_memory);
+    
+#ifdef POK_NEEDS_DEBUG
+    if (waste_percent > MEMORY_WASTE_THRESHOLD_PERCENT) {
+      printf("WARNING: Partition %d MPU alignment wastes %u%% memory (%u bytes) - cleared for security\n",
+             partition_id, waste_percent, exposed_memory);
+    }
 #endif
   }
 
@@ -103,13 +123,22 @@ pok_ret_t pok_create_space(uint8_t partition_id, uint32_t addr, uint32_t size) {
     printf("ERROR: Partition %d base addr 0x%x not aligned to size 0x%x\n",
            partition_id, addr, aligned_size);
 #endif
-    return (POK_ERRNO_EINVAL);
+    return POK_ERRNO_EINVAL;
   }
 
-  /* Configure MPU region for partition */
-  if (pok_mpu_configure_region(region_id, addr, aligned_size, mpu_attributes) !=
-      POK_ERRNO_OK) {
-    return (POK_ERRNO_EFAULT);
+  /* Configure MPU region for partition with subregion support to hide unused memory */
+  if (aligned_size >= ARM_MPU_MIN_SUBREGION_SIZE && (aligned_size - size) >= (size / 4)) {
+    /* Use subregions if region is large enough and waste is significant */
+    if (pok_mpu_configure_region_with_subregions(region_id, addr, size, aligned_size, mpu_attributes) !=
+        POK_ERRNO_OK) {
+      return POK_ERRNO_EFAULT;
+    }
+  } else {
+    /* Use standard region configuration for small regions */
+    if (pok_mpu_configure_region(region_id, addr, aligned_size, mpu_attributes) !=
+        POK_ERRNO_OK) {
+      return POK_ERRNO_EFAULT;
+    }
   }
 
   /* Store partition information */
@@ -125,7 +154,7 @@ pok_ret_t pok_create_space(uint8_t partition_id, uint32_t addr, uint32_t size) {
          region_id);
 #endif
 
-  return (POK_ERRNO_OK);
+  return POK_ERRNO_OK;
 }
 
 /**
@@ -142,21 +171,22 @@ pok_ret_t pok_create_code_region(uint8_t partition_id, uint32_t code_addr,
   uint8_t region_id;
 
   if (partition_id >= POK_CONFIG_NB_PARTITIONS) {
-    return (POK_ERRNO_EINVAL);
+    return POK_ERRNO_EINVAL;
   }
 
   /* Use partition_id + 1 + POK_CONFIG_NB_PARTITIONS as code region ID */
   region_id = partition_id + 1 + POK_CONFIG_NB_PARTITIONS;
 
   if (region_id >= pok_mpu_get_region_count()) {
-    return (POK_ERRNO_EINVAL);
+    return POK_ERRNO_EINVAL;
   }
 
   /* Configure MPU attributes for code region - enforce W^X:
    * - Read/Execute only (no write permission)
    * - Normal memory with caching
    */
-  mpu_attributes = (MPU_AP_ALL_RO << MPU_RASR_AP_SHIFT) | MPU_ATTR_NORMAL;
+  /* Use helper macro for code region (read-only, executable) */
+  mpu_attributes = MPU_CONFIG_FLASH_CODE;
 
   /* Align size to power of 2 (MPU requirement) */
   uint32_t aligned_size;
@@ -176,13 +206,13 @@ pok_ret_t pok_create_code_region(uint8_t partition_id, uint32_t code_addr,
         "ERROR: Partition %d code region addr 0x%x not aligned to size 0x%x\n",
         partition_id, code_addr, aligned_size);
 #endif
-    return (POK_ERRNO_EINVAL);
+    return POK_ERRNO_EINVAL;
   }
 
   /* Configure MPU region for partition code */
   if (pok_mpu_configure_region(region_id, code_addr, aligned_size,
                                mpu_attributes) != POK_ERRNO_OK) {
-    return (POK_ERRNO_EFAULT);
+    return POK_ERRNO_EFAULT;
   }
 
   /* Initially disable the code region */
@@ -194,7 +224,7 @@ pok_ret_t pok_create_code_region(uint8_t partition_id, uint32_t code_addr,
          partition_id, code_addr, code_size, region_id);
 #endif
 
-  return (POK_ERRNO_OK);
+  return POK_ERRNO_OK;
 }
 
 pok_ret_t pok_space_switch(uint8_t old_partition_id, uint8_t new_partition_id) {
@@ -208,7 +238,7 @@ pok_ret_t pok_space_switch(uint8_t old_partition_id, uint8_t new_partition_id) {
     pok_mpu_enable_region(spaces[new_partition_id].mpu_region);
   }
 
-  return (POK_ERRNO_OK);
+  return POK_ERRNO_OK;
 }
 
 uint32_t pok_space_base_vaddr(uint32_t addr) {
@@ -250,7 +280,7 @@ uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,
   ctx->r1 = arg2; /* Second argument */
   ctx->sp = stack_abs &
             ~STACK_ALIGNMENT_MASK; /* User stack pointer (8-byte aligned) */
-  ctx->lr = 0xFFFFFFFD;            /* Return to Thread mode, use PSP */
+  ctx->lr = ARM_EXC_RETURN_THREAD_PSP;  /* Return to Thread mode, use PSP */
   ctx->pc = entry_abs;             /* Entry point */
   ctx->xpsr = 0x01000000;          /* Thumb bit set */
 
@@ -269,8 +299,8 @@ pok_ret_t pok_arch_space_init(void) {
   memset(spaces, 0, sizeof(spaces));
 
   /* Reserve region 0 for kernel space */
-  uint32_t kernel_attrs =
-      (MPU_AP_PRIV_RW << MPU_RASR_AP_SHIFT) | MPU_ATTR_NORMAL;
+  /* Use helper macro for kernel data region */
+  uint32_t kernel_attrs = MPU_CONFIG_KERNEL_DATA;
   ret = pok_mpu_configure_region(0, pok_bsp_kernel_base(),
                                  pok_bsp_kernel_size(), kernel_attrs);
   if (ret != POK_ERRNO_OK) {
@@ -284,5 +314,5 @@ pok_ret_t pok_arch_space_init(void) {
   printf("pok_arch_space_init: MPU regions=%d\n", pok_mpu_get_region_count());
 #endif
 
-  return (POK_ERRNO_OK);
+  return POK_ERRNO_OK;
 }

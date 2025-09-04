@@ -18,19 +18,42 @@
  * \author POK team
  */
 
+/* POK system headers */
+#include <errno.h>
+
+/* POK core headers */
 #include <core/debug.h>
 #include <core/partition.h>
 #include <core/syscall.h>
-#include <errno.h>
 
+/* Architecture-specific headers */
+#include "arch.h"
 #include "mpu.h"
 #include "nvic.h"
 
 /* Extract partition ID from current MPU configuration */
 static uint8_t pok_get_current_partition_id(void) {
-  /* TODO: Enhance to derive partition ID from current active MPU region */
-  extern uint8_t pok_current_partition;
-  return (pok_current_partition);
+  /* Get active user MPU region */
+  uint8_t active_region = pok_mpu_get_active_user_region();
+  
+  /* Region 0 is kernel, user regions start at 1 */
+  if (active_region == 0) {
+    /* Running in kernel mode */
+    extern uint8_t pok_current_partition;
+    return (pok_current_partition);
+  }
+  
+  /* Convert region ID back to partition ID (partition_id = region_id - 1) */
+  uint8_t partition_id = active_region - 1;
+  
+  /* Validate derived partition ID */
+  if (partition_id >= POK_CONFIG_NB_PARTITIONS) {
+    /* Fallback to global variable if derived ID is invalid */
+    extern uint8_t pok_current_partition;
+    return (pok_current_partition);
+  }
+  
+  return (partition_id);
 }
 
 /*
@@ -56,7 +79,7 @@ void SVC_Handler(void) {
       (uint16_t *)(frame[6] - 2);       /* PC points to instruction after SVC */
   uint16_t svc_instruction = *svc_addr; /* Read the 16-bit SVC instruction */
   uint8_t svc_number =
-      svc_instruction & 0xFF; /* SVC number is in lower 8 bits */
+      svc_instruction & ARM_SVC_NUMBER_MASK; /* SVC number is in lower 8 bits */
   (void)svc_number; /* Currently unused - could be used for SVC routing */
 
   /*
@@ -83,8 +106,8 @@ void SVC_Handler(void) {
   /*
    * Validate that the arguments pointer is within partition bounds
    */
-  if (pok_check_ptr_in_partition(syscall_info.partition, (void *)frame[1],
-                                 sizeof(pok_syscall_args_t)) == 0) {
+  if (!pok_check_ptr_in_partition(syscall_info.partition, (void *)frame[1],
+                                  sizeof(pok_syscall_args_t))) {
     syscall_ret = POK_ERRNO_EINVAL;
     goto syscall_exit;
   }
@@ -135,7 +158,7 @@ void __attribute__((naked)) PendSV_Handler(void) {
 
       "2:                         \n"
       /* Ensure thread mode with PSP */
-      "ldr r0, =0xFFFFFFFD        \n" /* EXC_RETURN: Return to Thread, use PSP
+      "ldr r0, =%0                \n" /* EXC_RETURN: Return to Thread, use PSP
                                        */
       "bx r0                      \n" /* Return from exception */
 
@@ -161,5 +184,5 @@ pok_ret_t pok_syscall_init(void) {
   pok_nvic_set_handler(EXCEPTION_PENDSV, PendSV_Handler);
   pok_nvic_set_priority(EXCEPTION_PENDSV, NVIC_PRIORITY_LOWEST);
 
-  return (POK_ERRNO_OK);
+  return POK_ERRNO_OK;
 }

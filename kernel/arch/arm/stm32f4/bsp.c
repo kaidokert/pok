@@ -22,27 +22,21 @@
 #include <bsp.h>
 #include <libc.h>
 
+/* STM32F4-specific memory configuration overrides */
+#define POK_FLASH_BASE        0x08000000
+#define POK_SRAM_BASE         0x20000000
+#define POK_SRAM_SIZE         0x20000    /* 128KB */
+#define POK_KERNEL_MEMORY_SIZE 0x8000    /* 32KB for kernel */
+
+/* Include configurable memory layout */
+#include "../memory_config.h"
+
 /* Forward declarations for STM32F4 specific functions */
 pok_ret_t pok_cons_init(void);
 pok_ret_t pok_timer_init(void);
 
-/* STM32F4 specific defines */
-#define STM32F4_FLASH_BASE    0x08000000
-#define STM32F4_SRAM_BASE     0x20000000
-#define STM32F4_SRAM_SIZE     0x20000    /* 128KB */
-
-/* Memory layout for STM32F4 */
-#define KERNEL_MEMORY_BASE    STM32F4_SRAM_BASE
-#define KERNEL_MEMORY_SIZE    0x8000     /* 32KB for kernel */
-#define USER_MEMORY_BASE      (STM32F4_SRAM_BASE + KERNEL_MEMORY_SIZE)
-#define USER_MEMORY_SIZE      (STM32F4_SRAM_SIZE - KERNEL_MEMORY_SIZE)
-
-/* Memory alignment constants */
-#define MEMORY_ALIGNMENT 8
-#define MEMORY_ALIGNMENT_MASK 7
-
 /* Simple kernel memory allocator - allocates from kernel space for stacks, etc. */
-static uint32_t current_alloc_addr = KERNEL_MEMORY_BASE;
+static uint32_t current_alloc_addr = POK_KERNEL_MEMORY_BASE;
 
 /**
  * Initialize STM32F4 Board Support Package
@@ -76,7 +70,7 @@ pok_ret_t pok_bsp_init(void) {
     return (ret);
   }
   
-  return (POK_ERRNO_OK);
+  return POK_ERRNO_OK;
 }
 
 void *pok_bsp_mem_alloc(size_t size) {
@@ -87,13 +81,13 @@ void *pok_bsp_mem_alloc(size_t size) {
   }
   
   /* Align to 8-byte boundary */
-  size = (size + MEMORY_ALIGNMENT_MASK) & ~MEMORY_ALIGNMENT_MASK;
+  size = (size + POK_MEMORY_ALIGNMENT_MASK) & ~POK_MEMORY_ALIGNMENT_MASK;
   
   /* Check if we have enough kernel memory remaining - use subtraction to prevent overflow */
-  uint32_t kernel_end = KERNEL_MEMORY_BASE + KERNEL_MEMORY_SIZE;
+  uint32_t kernel_end = POK_KERNEL_MEMORY_BASE + POK_KERNEL_MEMORY_SIZE;
   
   /* Additional sanity check: ensure current_alloc_addr is within valid kernel range */
-  if (current_alloc_addr < KERNEL_MEMORY_BASE || current_alloc_addr > kernel_end) {
+  if (current_alloc_addr < POK_KERNEL_MEMORY_BASE || current_alloc_addr > kernel_end) {
 #ifdef POK_NEEDS_DEBUG
     printf("ERROR: Kernel allocator corrupted. current_alloc_addr=0x%x\n", current_alloc_addr);
 #endif
@@ -103,7 +97,7 @@ void *pok_bsp_mem_alloc(size_t size) {
   if (size > (kernel_end - current_alloc_addr)) {
 #ifdef POK_NEEDS_DEBUG
     printf("ERROR: Kernel memory exhausted. Requested: %u, Available: %u\n",
-           size, (KERNEL_MEMORY_BASE + KERNEL_MEMORY_SIZE) - current_alloc_addr);
+           size, (POK_KERNEL_MEMORY_BASE + POK_KERNEL_MEMORY_SIZE) - current_alloc_addr);
 #endif
     return (NULL);
   }
@@ -119,17 +113,17 @@ void *pok_bsp_mem_alloc(size_t size) {
 }
 
 inline uint32_t pok_bsp_mem_base(void) {
-  return (USER_MEMORY_BASE);
+  return (POK_USER_MEMORY_BASE);
 }
 
 inline uint32_t pok_bsp_mem_size(void) {
-  return (USER_MEMORY_SIZE);
+  return (POK_USER_MEMORY_SIZE);
 }
 
 inline uint32_t pok_bsp_kernel_base(void) {
-  return (KERNEL_MEMORY_BASE);
+  return (POK_KERNEL_MEMORY_BASE);
 }
 
 inline uint32_t pok_bsp_kernel_size(void) {
-  return (KERNEL_MEMORY_SIZE);
+  return (POK_KERNEL_REGION_SIZE);
 }

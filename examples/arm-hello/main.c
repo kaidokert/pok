@@ -20,6 +20,7 @@
 #include <libc/stdio.h>
 #include <core/thread.h>
 #include <core/time.h>
+#include <core/partition.h>
 
 void thread1_job(void) {
   int i = 0;
@@ -41,20 +42,41 @@ void thread2_job(void) {
 
 int main(void) {
   pok_ret_t ret;
-  uint32_t tid1, tid2;
+  uint8_t tid1, tid2;
+  pok_thread_attr_t attr1, attr2;
   
   printf("POK ARM Cortex-M Hello World Example\n");
   printf("====================================\n");
   
+  /* Setup first thread attributes */
+  attr1.entry = (void *)thread1_job;
+  attr1.priority = 1;
+  attr1.stack_size = 1024;
+  attr1.processor_affinity = 0;
+  attr1.period = 0;
+  attr1.deadline = 0;
+  attr1.time_capacity = 0;
+  attr1.state = POK_STATE_RUNNABLE;
+  
   /* Create first thread */
-  ret = pok_thread_create(&tid1, thread1_job, 1024, 1, 0);
+  ret = pok_thread_create(&tid1, &attr1);
   if (ret != POK_ERRNO_OK) {
     printf("Error creating thread 1: %d\n", ret);
     return -1;
   }
   
+  /* Setup second thread attributes */
+  attr2.entry = (void *)thread2_job;
+  attr2.priority = 1;
+  attr2.stack_size = 1024;
+  attr2.processor_affinity = 0;
+  attr2.period = 0;
+  attr2.deadline = 0;
+  attr2.time_capacity = 0;
+  attr2.state = POK_STATE_RUNNABLE;
+  
   /* Create second thread */
-  ret = pok_thread_create(&tid2, thread2_job, 1024, 1, 0);
+  ret = pok_thread_create(&tid2, &attr2);
   if (ret != POK_ERRNO_OK) {
     printf("Error creating thread 2: %d\n", ret);
     return -1;

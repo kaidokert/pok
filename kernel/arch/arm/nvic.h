@@ -29,6 +29,7 @@
 #define SCB_VTOR                (*((volatile uint32_t *)(SCB_BASE + 0x08)))
 #define SCB_AIRCR               (*((volatile uint32_t *)(SCB_BASE + 0x0C)))
 #define SCB_SCR                 (*((volatile uint32_t *)(SCB_BASE + 0x10)))
+#define SCB_CCR                 (*((volatile uint32_t *)(SCB_BASE + 0x14)))
 #define SCB_SHCSR               (*((volatile uint32_t *)(SCB_BASE + 0x24)))
 #define SCB_SHPR1               (*((volatile uint32_t *)(SCB_BASE + 0x18)))
 #define SCB_SHPR2               (*((volatile uint32_t *)(SCB_BASE + 0x1C)))
@@ -66,6 +67,9 @@
 #define SCB_ICSR_PENDSTSET      (1 << 26)
 #define SCB_ICSR_PENDSVCLR      (1 << 27)
 #define SCB_ICSR_PENDSVSET      (1 << 28)
+
+/* Configuration and Control Register bits */
+#define SCB_CCR_DIV_0_TRP       (1 << 4)
 
 /* System Handler Control and State Register bits */
 #define SCB_SHCSR_MEMFAULTENA   (1 << 16)

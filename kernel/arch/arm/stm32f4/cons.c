@@ -20,6 +20,7 @@
 
 #include <errno.h>
 #include <libc.h>
+#include "clock_config.h"
 
 /* STM32F4 USART1 registers */
 #define USART1_BASE       0x40011000
@@ -49,7 +50,10 @@
 
 /* GPIO registers for USART pins */
 #define GPIOA_BASE        0x40020000
-#define GPIOA_MODER       (*((volatile uint32_t *)(GPIOA_BASE + 0x00)))
+#define GPIOA_MODER       (*((volatile uint32_t *)(GPIOA_BASE + 0x00)))  /* Mode register */
+#define GPIOA_OTYPER      (*((volatile uint32_t *)(GPIOA_BASE + 0x04)))  /* Output type register */
+#define GPIOA_OSPEEDR     (*((volatile uint32_t *)(GPIOA_BASE + 0x08)))  /* Output speed register */
+#define GPIOA_PUPDR       (*((volatile uint32_t *)(GPIOA_BASE + 0x0C)))  /* Pull-up/pull-down register */
 #define GPIOA_AFRL        (*((volatile uint32_t *)(GPIOA_BASE + 0x20)))  /* AF[7:0] */
 #define GPIOA_AFRH        (*((volatile uint32_t *)(GPIOA_BASE + 0x24)))  /* AF[15:8] */
 
@@ -67,10 +71,21 @@ pok_ret_t pok_cons_init(void) {
   GPIOA_AFRH &= ~((0xF << 4) | (0xF << 8));  /* Clear AF bits in AFRH register */
   GPIOA_AFRH |= (7 << 4) | (7 << 8);         /* Set AF7 for PA9 and PA10 */
   
+  /* Configure output type as push-pull (default, but explicit) */
+  GPIOA_OTYPER &= ~((1 << 9) | (1 << 10));   /* PA9, PA10 push-pull output */
+  
+  /* Configure high speed for 115200 baud reliability */
+  GPIOA_OSPEEDR &= ~((3 << 18) | (3 << 20)); /* Clear speed bits */
+  GPIOA_OSPEEDR |= (3 << 18) | (3 << 20);    /* Set very high speed (100MHz) */
+  
+  /* Configure pull-up for TX, no pull for RX (typical UART config) */
+  GPIOA_PUPDR &= ~((3 << 18) | (3 << 20));   /* Clear pull bits */
+  GPIOA_PUPDR |= (1 << 18);                  /* PA9 (TX) pull-up, PA10 (RX) no pull */
+  
   /* Configure USART1 baud rate */
   /* For oversampling by 16: BRR = (mantissa << 4) + fraction */
   /* BRR_value = f_CK / (16 * baud_rate) */
-  uint32_t apb2_clock = 16000000;  /* Assuming 16MHz APB2 clock */
+  uint32_t apb2_clock = APB2_FREQ_HZ;  /* Use correct 84MHz APB2 clock */
   uint32_t baud_rate = 115200;
   uint32_t brr_value = (apb2_clock + (8 * baud_rate)) / (16 * baud_rate);  /* Rounded division */
   
@@ -79,12 +94,12 @@ pok_ret_t pok_cons_init(void) {
   /* Enable USART, transmitter, and receiver */
   USART1_CR1 = USART_CR1_UE | USART_CR1_TE | USART_CR1_RE;
   
-  return (POK_ERRNO_OK);
+  return POK_ERRNO_OK;
 }
 
 pok_ret_t pok_cons_write(const char *s, size_t length) {
   if (s == NULL) {
-    return (POK_ERRNO_EINVAL);
+    return POK_ERRNO_EINVAL;
   }
   
   for (size_t i = 0; i < length; i++) {
@@ -94,15 +109,15 @@ pok_ret_t pok_cons_write(const char *s, size_t length) {
     }
     
     /* Send character */
-    USART1_DR = s[i];
+    USART1_DR = (uint8_t)s[i];
   }
   
-  return (POK_ERRNO_OK);
+  return POK_ERRNO_OK;
 }
 
 pok_ret_t pok_cons_read(char *s, size_t length) {
   if (s == NULL) {
-    return (POK_ERRNO_EINVAL);
+    return POK_ERRNO_EINVAL;
   }
   
   for (size_t i = 0; i < length; i++) {
@@ -115,5 +130,5 @@ pok_ret_t pok_cons_read(char *s, size_t length) {
     s[i] = USART1_DR & 0xFF;
   }
   
-  return (POK_ERRNO_OK);
+  return POK_ERRNO_OK;
 }

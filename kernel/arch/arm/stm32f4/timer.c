@@ -22,6 +22,7 @@
 #include <libc.h>
 #include <core/time.h>
 #include "../nvic.h"
+#include "clock_config.h"
 
 /* SysTick registers */
 #define SYSTICK_BASE      0xE000E010
@@ -34,12 +35,9 @@
 #define SYSTICK_CSR_TICKINT   (1 << 1)
 #define SYSTICK_CSR_CLKSOURCE (1 << 2)
 
-/* System clock frequency (Hz) - STM32F4 default */
-#define SYSTEM_CLOCK_HZ   16000000
-
 /* Timer tick frequency (100 Hz = 10ms ticks) */
 #define TIMER_TICK_HZ     100
-#define TIMER_RELOAD_VAL  (SYSTEM_CLOCK_HZ / TIMER_TICK_HZ)
+#define TIMER_RELOAD_VAL  (SYSTICK_FREQ_HZ / TIMER_TICK_HZ)
 
 /* SysTick reload register is 24-bit */
 #define SYSTICK_MAX_RELOAD  0xFFFFFF
@@ -52,12 +50,12 @@ pok_ret_t pok_timer_init(void) {
            TIMER_RELOAD_VAL, SYSTICK_MAX_RELOAD);
     printf("Consider reducing SYSTEM_CLOCK_HZ or increasing TIMER_TICK_HZ\n");
 #endif
-    return (POK_ERRNO_EINVAL);
+    return POK_ERRNO_EINVAL;
   }
 
 #ifdef POK_NEEDS_DEBUG
   printf("SysTick: %u Hz system clock, %u Hz tick rate, reload = %u\n",
-         SYSTEM_CLOCK_HZ, TIMER_TICK_HZ, TIMER_RELOAD_VAL);
+         SYSTICK_FREQ_HZ, TIMER_TICK_HZ, TIMER_RELOAD_VAL);
 #endif
 
   /* Disable SysTick */
@@ -72,7 +70,10 @@ pok_ret_t pok_timer_init(void) {
   /* Configure SysTick: enable, interrupt, use processor clock */
   SYSTICK_CSR = SYSTICK_CSR_ENABLE | SYSTICK_CSR_TICKINT | SYSTICK_CSR_CLKSOURCE;
   
-  return (POK_ERRNO_OK);
+  /* Data Synchronization Barrier to ensure SysTick configuration completes */
+  __asm volatile("dsb" : : : "memory");
+  
+  return POK_ERRNO_OK;
 }
 
 void pok_timer_handler(void) {

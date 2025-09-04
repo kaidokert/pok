@@ -19,11 +19,16 @@
  * architecture
  */
 
-#include "mpu.h"
-#include "nvic.h"
+/* POK system headers */
+#include <errno.h>
+
+/* POK core headers */
 #include <arch.h>
 #include <core/partition.h>
-#include <errno.h>
+
+/* Architecture-specific headers */
+#include "mpu.h"
+#include "nvic.h"
 
 extern pok_ret_t pok_arch_space_init(void);
 
@@ -32,30 +37,39 @@ pok_ret_t pok_arch_init() {
 
   ret = pok_mpu_init();
   if (ret != POK_ERRNO_OK) {
-    return (ret);
+    return ret;
   }
 
   ret = pok_nvic_init();
   if (ret != POK_ERRNO_OK) {
-    return (ret);
+    /* Cleanup: disable MPU on NVIC init failure */
+    pok_mpu_disable();
+    return ret;
   }
 
   ret = pok_arch_space_init();
   if (ret != POK_ERRNO_OK) {
-    return (ret);
+    /* Cleanup: disable MPU on space init failure */
+    /* Note: NVIC cleanup not needed as it doesn't maintain state */
+    pok_mpu_disable();
+    return ret;
   }
 
-  return (POK_ERRNO_OK);
+  return POK_ERRNO_OK;
 }
 
 pok_ret_t pok_arch_preempt_disable() {
   __asm volatile("cpsid i" : : : "memory");
-  return (POK_ERRNO_OK);
+  __asm volatile("dsb" : : : "memory");
+  __asm volatile("isb" : : : "memory");
+  return POK_ERRNO_OK;
 }
 
 pok_ret_t pok_arch_preempt_enable() {
   __asm volatile("cpsie i" : : : "memory");
-  return (POK_ERRNO_OK);
+  __asm volatile("dsb" : : : "memory");
+  __asm volatile("isb" : : : "memory");
+  return POK_ERRNO_OK;
 }
 
 pok_ret_t pok_arch_idle() {
