@@ -24,12 +24,18 @@
 #include <errno.h>
 #include <arch.h>
 
-extern void pok_arch_space_init(void);
+extern pok_ret_t pok_arch_space_init(void);
 
 pok_ret_t pok_arch_init() {
+  pok_ret_t ret;
+  
   pok_mpu_init();
   pok_nvic_init();
-  pok_arch_space_init();
+  
+  ret = pok_arch_space_init();
+  if (ret != POK_ERRNO_OK) {
+    return ret;
+  }
 
   return (POK_ERRNO_OK);
 }

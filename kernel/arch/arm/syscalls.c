@@ -49,8 +49,9 @@ void SVC_Handler(void) {
   __asm volatile ("mrs %0, psp" : "=r" (frame));
   
   /* Extract SVC number from the SVC instruction */
-  uint8_t *svc_addr = (uint8_t *)(frame[6] - 2);  /* PC points to instruction after SVC */
-  uint8_t svc_number = svc_addr[0];               /* SVC number is in lower byte */
+  uint16_t *svc_addr = (uint16_t *)(frame[6] - 2); /* PC points to instruction after SVC */
+  uint16_t svc_instruction = *svc_addr;             /* Read the 16-bit SVC instruction */
+  uint8_t svc_number = svc_instruction & 0xFF;     /* SVC number is in lower 8 bits */
   
   /*
    * Set up syscall information

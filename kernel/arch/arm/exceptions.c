@@ -24,29 +24,48 @@
 #include <core/partition.h>
 #include <errno.h>
 
+/* CFSR (Configurable Fault Status Register) bits */
+#define SCB_CFSR    (*((volatile uint32_t *)(SCB_BASE + 0x28)))
+#define CFSR_MMARVALID  (1 << 7)   /* MemManage Fault Address Register valid */
+#define CFSR_BFARVALID  (1 << 15)  /* Bus Fault Address Register valid */
+
 /*
  * Memory Management Fault Handler
  * Handles MPU violations and other memory management faults
  */
 void MemManage_Handler(void) {
   uint32_t *frame;
-  uint32_t fault_addr;
+  uint32_t fault_addr = 0;
   uint8_t partition_id;
+  uint32_t cfsr;
   
   /* Get stack frame */
   __asm volatile ("mrs %0, psp" : "=r" (frame));
   
-  /* Get faulting address from MemManage Fault Address Register */
-  fault_addr = *((volatile uint32_t *)(SCB_BASE + 0x34)); /* MMFAR */
+  /* Read CFSR to check fault status */
+  cfsr = SCB_CFSR;
+  
+  /* Get faulting address from MemManage Fault Address Register if valid */
+  if (cfsr & CFSR_MMARVALID) {
+    fault_addr = *((volatile uint32_t *)(SCB_BASE + 0x34)); /* MMFAR */
+  }
+  
+  /* Clear MemManage fault flags in CFSR */
+  SCB_CFSR = cfsr & 0xFF;  /* Clear MMFSR bits */
   
   /* Get current partition */
   extern uint8_t pok_current_partition;
   partition_id = pok_current_partition;
   
 #ifdef POK_NEEDS_DEBUG
-  printf("MemManage fault in partition %d at address 0x%x\n", 
-         partition_id, fault_addr);
-  printf("PC: 0x%x, LR: 0x%x\n", frame[6], frame[5]);
+  if (cfsr & CFSR_MMARVALID) {
+    printf("MemManage fault in partition %d at address 0x%x\n", 
+           partition_id, fault_addr);
+  } else {
+    printf("MemManage fault in partition %d (address not available)\n", 
+           partition_id);
+  }
+  printf("PC: 0x%x, LR: 0x%x, CFSR: 0x%x\n", frame[6], frame[5], cfsr);
 #endif
   
   /* Handle partition isolation violation */
@@ -70,21 +89,35 @@ void MemManage_Handler(void) {
  */
 void BusFault_Handler(void) {
   uint32_t *frame;
-  uint32_t fault_addr;
+  uint32_t fault_addr = 0;
   uint8_t partition_id;
+  uint32_t cfsr;
   
   __asm volatile ("mrs %0, psp" : "=r" (frame));
   
-  /* Get faulting address from Bus Fault Address Register */
-  fault_addr = *((volatile uint32_t *)(SCB_BASE + 0x38)); /* BFAR */
+  /* Read CFSR to check fault status */
+  cfsr = SCB_CFSR;
+  
+  /* Get faulting address from Bus Fault Address Register if valid */
+  if (cfsr & CFSR_BFARVALID) {
+    fault_addr = *((volatile uint32_t *)(SCB_BASE + 0x38)); /* BFAR */
+  }
+  
+  /* Clear Bus fault flags in CFSR */
+  SCB_CFSR = (cfsr & 0xFF00) >> 8;  /* Clear BFSR bits */
   
   extern uint8_t pok_current_partition;
   partition_id = pok_current_partition;
   
 #ifdef POK_NEEDS_DEBUG
-  printf("BusFault in partition %d at address 0x%x\n", 
-         partition_id, fault_addr);
-  printf("PC: 0x%x, LR: 0x%x\n", frame[6], frame[5]);
+  if (cfsr & CFSR_BFARVALID) {
+    printf("BusFault in partition %d at address 0x%x\n", 
+           partition_id, fault_addr);
+  } else {
+    printf("BusFault in partition %d (address not available)\n", 
+           partition_id);
+  }
+  printf("PC: 0x%x, LR: 0x%x, CFSR: 0x%x\n", frame[6], frame[5], cfsr);
 #endif
   
   if (partition_id < POK_CONFIG_NB_PARTITIONS) {

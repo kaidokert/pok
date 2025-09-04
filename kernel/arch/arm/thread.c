@@ -44,7 +44,8 @@ uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
   sp->ctx.pc = (uint32_t)pok_thread_start;  /* Start with thread wrapper */
   sp->ctx.lr = 0xFFFFFFFD;                  /* Return to Thread mode, use PSP */
   sp->ctx.xpsr = 0x01000000;                /* Thumb bit set */
-  sp->ctx.sp = (uint32_t)stack_addr + stack_size - 8;  /* User stack pointer */
+  /* Ensure 8-byte aligned stack pointer */
+  sp->ctx.sp = ((uint32_t)stack_addr + stack_size - 8) & ~0x7u;
   
   sp->entry = entry;
   sp->id = thread_id;

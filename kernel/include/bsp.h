@@ -33,6 +33,11 @@ pok_ret_t pok_bsp_irq_register(uint8_t irq, void (*handler)(void));
 
 void *pok_bsp_mem_alloc(size_t size);
 
+uint32_t pok_bsp_mem_base(void);
+uint32_t pok_bsp_mem_size(void);
+uint32_t pok_bsp_kernel_base(void);
+uint32_t pok_bsp_kernel_size(void);
+
 pok_ret_t pok_bsp_time_init();
 
 bool_t pok_cons_write(const char *s, size_t length);

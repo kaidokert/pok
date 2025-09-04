@@ -61,10 +61,28 @@ pok_ret_t pok_create_space(uint8_t partition_id, uint32_t addr, uint32_t size) {
    */
   mpu_attributes = (MPU_AP_ALL_RW << MPU_RASR_AP_SHIFT) | MPU_ATTR_NORMAL;
   
-  /* Align size to power of 2 */
+  /* Align size to power of 2 (MPU requirement) */
   uint32_t aligned_size = 32;
   while (aligned_size < size) {
     aligned_size <<= 1;
+  }
+  
+  /* Security check: warn if alignment exposes significant unused memory */
+  uint32_t exposed_memory = aligned_size - size;
+  if (exposed_memory > (size / 4)) {  /* More than 25% waste */
+#ifdef POK_NEEDS_DEBUG
+    printf("WARNING: Partition %d MPU alignment exposes %u bytes of unused memory\n", 
+           partition_id, exposed_memory);
+#endif
+  }
+  
+  /* Validate base address alignment matches MPU requirements */
+  if ((addr & (aligned_size - 1)) != 0) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: Partition %d base addr 0x%x not aligned to size 0x%x\n",
+           partition_id, addr, aligned_size);
+#endif
+    return (POK_ERRNO_EINVAL);
   }
   
   /* Configure MPU region for partition */
@@ -135,7 +153,7 @@ uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,
   /* Initialize ARM Cortex-M context */
   ctx->r0 = arg1;                    /* First argument */
   ctx->r1 = arg2;                    /* Second argument */
-  ctx->sp = stack_abs;               /* User stack pointer */
+  ctx->sp = stack_abs & ~0x7u;       /* User stack pointer (8-byte aligned) */
   ctx->lr = 0xFFFFFFFD;              /* Return to Thread mode, use PSP */
   ctx->pc = entry_abs;               /* Entry point */
   ctx->xpsr = 0x01000000;            /* Thumb bit set */
@@ -148,15 +166,25 @@ uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,
   return (uint32_t)ctx;
 }
 
-void pok_arch_space_init(void) {
+pok_ret_t pok_arch_space_init(void) {
+  pok_ret_t ret;
+  
   /* Initialize partition spaces array */
   memset(spaces, 0, sizeof(spaces));
   
   /* Reserve region 0 for kernel space */
   uint32_t kernel_attrs = (MPU_AP_PRIV_RW << MPU_RASR_AP_SHIFT) | MPU_ATTR_NORMAL;
-  pok_mpu_configure_region(0, 0x00000000, 0x20000000, kernel_attrs);
+  ret = pok_mpu_configure_region(0, pok_bsp_kernel_base(), pok_bsp_kernel_size(), kernel_attrs);
+  if (ret != POK_ERRNO_OK) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: Failed to configure kernel MPU region: %d\n", ret);
+#endif
+    return ret;
+  }
   
 #ifdef POK_NEEDS_DEBUG
   printf("pok_arch_space_init: MPU regions=%d\n", pok_mpu_get_region_count());
 #endif
+  
+  return POK_ERRNO_OK;
 }

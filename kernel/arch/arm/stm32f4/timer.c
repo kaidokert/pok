@@ -40,7 +40,25 @@
 #define TIMER_TICK_HZ     100
 #define TIMER_RELOAD_VAL  (SYSTEM_CLOCK_HZ / TIMER_TICK_HZ)
 
+/* SysTick reload register is 24-bit */
+#define SYSTICK_MAX_RELOAD  0xFFFFFF
+
 pok_ret_t pok_timer_init(void) {
+  /* Validate SysTick reload value doesn't exceed 24-bit limit */
+  if (TIMER_RELOAD_VAL > SYSTICK_MAX_RELOAD) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: SysTick reload value %u exceeds 24-bit limit %u\n", 
+           TIMER_RELOAD_VAL, SYSTICK_MAX_RELOAD);
+    printf("Consider reducing SYSTEM_CLOCK_HZ or increasing TIMER_TICK_HZ\n");
+#endif
+    return (POK_ERRNO_EINVAL);
+  }
+
+#ifdef POK_NEEDS_DEBUG
+  printf("SysTick: %u Hz system clock, %u Hz tick rate, reload = %u\n",
+         SYSTEM_CLOCK_HZ, TIMER_TICK_HZ, TIMER_RELOAD_VAL);
+#endif
+
   /* Disable SysTick */
   SYSTICK_CSR = 0;
   

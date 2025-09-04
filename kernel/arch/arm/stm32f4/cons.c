@@ -67,7 +67,8 @@ pok_ret_t pok_cons_init(void) {
   
   /* Configure USART1 */
   /* Assuming 16MHz clock, set baud rate to 115200 */
-  USART1_BRR = 16000000 / 115200;
+  /* BRR = fck / (16 * baud_rate) for oversampling by 16 */
+  USART1_BRR = 16000000 / (16 * 115200);
   
   /* Enable USART, transmitter, and receiver */
   USART1_CR1 = USART_CR1_UE | USART_CR1_TE | USART_CR1_RE;

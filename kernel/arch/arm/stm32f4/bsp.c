@@ -33,18 +33,34 @@
 #define USER_MEMORY_BASE      (STM32F4_SRAM_BASE + KERNEL_MEMORY_SIZE)
 #define USER_MEMORY_SIZE      (STM32F4_SRAM_SIZE - KERNEL_MEMORY_SIZE)
 
-/* Simple memory allocator */
+/* Simple kernel memory allocator - allocates from kernel space for stacks, etc. */
 static uint32_t current_alloc_addr = KERNEL_MEMORY_BASE;
 
-void pok_bsp_init(void) {
+pok_ret_t pok_bsp_init(void) {
+  pok_ret_t ret;
+  
   /* Initialize system clocks */
   /* In a real implementation, this would configure the STM32F4 clocks */
   
   /* Initialize console */
-  pok_cons_init();
+  ret = pok_cons_init();
+  if (ret != POK_ERRNO_OK) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: Console initialization failed: %d\n", ret);
+#endif
+    return ret;
+  }
   
   /* Initialize timer */
-  pok_timer_init();
+  ret = pok_timer_init();
+  if (ret != POK_ERRNO_OK) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: Timer initialization failed: %d\n", ret);
+#endif
+    return ret;
+  }
+  
+  return POK_ERRNO_OK;
 }
 
 char *pok_bsp_mem_alloc(uint32_t size) {
@@ -53,13 +69,21 @@ char *pok_bsp_mem_alloc(uint32_t size) {
   /* Align to 8-byte boundary */
   size = (size + 7) & ~7;
   
-  /* Check if we have enough memory */
-  if (current_alloc_addr + size > USER_MEMORY_BASE) {
+  /* Check if we have enough kernel memory remaining */
+  if (current_alloc_addr + size > KERNEL_MEMORY_BASE + KERNEL_MEMORY_SIZE) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: Kernel memory exhausted. Requested: %u, Available: %u\n",
+           size, (KERNEL_MEMORY_BASE + KERNEL_MEMORY_SIZE) - current_alloc_addr);
+#endif
     return NULL;
   }
   
   ret = (char *)current_alloc_addr;
   current_alloc_addr += size;
+  
+#ifdef POK_NEEDS_DEBUG
+  printf("Allocated %u bytes at 0x%x (kernel space)\n", size, (uint32_t)ret);
+#endif
   
   return ret;
 }
@@ -70,4 +94,12 @@ uint32_t pok_bsp_mem_base(void) {
 
 uint32_t pok_bsp_mem_size(void) {
   return USER_MEMORY_SIZE;
+}
+
+uint32_t pok_bsp_kernel_base(void) {
+  return KERNEL_MEMORY_BASE;
+}
+
+uint32_t pok_bsp_kernel_size(void) {
+  return KERNEL_MEMORY_SIZE;
 }
