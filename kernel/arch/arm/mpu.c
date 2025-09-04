@@ -221,8 +221,24 @@ pok_ret_t pok_mpu_disable_region(uint8_t region) {
   }
 
   MPU_RNR = region;
+pok_ret_t pok_mpu_disable_region(uint8_t region) {
+  if (region >= mpu_region_count) {
+    return POK_ERRNO_EINVAL;
+  }
+
+  uint32_t primask = __get_PRIMASK();
+  __disable_irq();
+
+  MPU_RNR = region;
   MPU_RASR &= ~MPU_RASR_ENABLE;
   mpu_regions[region].enabled = 0;
+
+  __asm volatile("dsb" : : : "memory");
+
+  __set_PRIMASK(primask);
+
+  return POK_ERRNO_OK;
+}
 
   __asm volatile("dsb" : : : "memory");
 

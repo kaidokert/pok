@@ -19,9 +19,10 @@ include $(TOPDIR)/misc/mk/objdir.mk
 
 all: $(LO_TARGET)
 
+$(LO_TARGET): $(OBJ_DIR)/$(BSP)/$(BSP).lo
+
 $(OBJ_DIR)/$(BSP)/$(BSP).lo::
 	$(CD) $(BSP) && $(MAKE)
-
 .PHONY: clean distclean depend all
 
 clean: common-clean

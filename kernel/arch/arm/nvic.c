@@ -77,6 +77,9 @@ static pok_ret_t pok_nvic_relocate_vector_table(void) {
   printf("Vector table relocated to RAM at 0x%x\n", ram_table_addr);
 #endif
 
+  __asm volatile("dsb" ::: "memory");
+  __asm volatile("isb");
+  return POK_ERRNO_OK;
   return POK_ERRNO_OK;
 }
 
@@ -148,7 +151,7 @@ pok_ret_t pok_nvic_set_handler(uint8_t irq, void (*handler)(void)) {
   
   /* Data Synchronization Barrier to ensure vector table update completes */
   __asm volatile("dsb" : : : "memory");
-  
+ __asm volatile("isb");
   /* Re-enable IRQ if it was enabled before */
   if (irq_was_enabled) {
     uint8_t external_irq = irq - EXCEPTION_IRQ0;
@@ -266,7 +269,8 @@ pok_ret_t pok_nvic_set_vector_table(uint32_t offset) {
   }
 
   SCB_VTOR = offset;
-
+  __asm volatile("dsb" : : : "memory");
+  __asm volatile("isb");
   return POK_ERRNO_OK;
 }
 

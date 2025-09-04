@@ -24,7 +24,7 @@
 /* POK core headers */
 #include <core/debug.h>
 #include <core/partition.h>
-
+#include <core/sched.h>
 /* Architecture-specific headers */
 #include "arch.h"
 #include "mpu.h"
@@ -139,17 +139,15 @@ static void MemManage_Handler_C(uint32_t *frame) {
 
   /* Handle partition isolation violation */
   if (partition_id < POK_CONFIG_NB_PARTITIONS) {
-    /* Terminate the offending partition */
-    pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED);
-
-    /* Force a reschedule to switch away from this partition */
-    pok_sched_end_period();
+    /* Terminate the offending partition and, on success, reschedule globally and return */
+    if (pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED) == POK_ERRNO_OK) {
+      pok_global_sched();
+      return;
+    }
   }
 
-  /* If we reach here, halt the system */
-  while (1) {
-    __asm volatile("wfi");
-  }
+  /* Could not recover: halt the system */
+  while (1) { __asm volatile("wfi"); }
 }
 
 /*
@@ -218,13 +216,12 @@ static void BusFault_Handler_C(uint32_t *frame) {
 #endif
 
   if (partition_id < POK_CONFIG_NB_PARTITIONS) {
-    pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED);
-    pok_sched_end_period();
+    if (pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED) == POK_ERRNO_OK) {
+      pok_global_sched();
+      return;
+    }
   }
-
-  while (1) {
-    __asm volatile("wfi");
-  }
+  while (1) { __asm volatile("wfi"); }
 }
 
 /*
@@ -274,13 +271,12 @@ static void UsageFault_Handler_C(uint32_t *frame) {
 #endif
 
   if (partition_id < POK_CONFIG_NB_PARTITIONS) {
-    pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED);
-    pok_sched_end_period();
+    if (pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED) == POK_ERRNO_OK) {
+      pok_global_sched();
+      return;
+    }
   }
-
-  while (1) {
-    __asm volatile("wfi");
-  }
+  while (1) { __asm volatile("wfi"); }
 }
 
 /*
@@ -341,12 +337,11 @@ static void HardFault_Handler_C(uint32_t *frame) {
 
   /* Try to recover by stopping the current partition */
   if (partition_id < POK_CONFIG_NB_PARTITIONS) {
-    pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED);
-    pok_sched_end_period();
+    if (pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED) == POK_ERRNO_OK) {
+      pok_global_sched();
+      return;
+    }
   }
-
   /* If recovery fails, halt the system */
-  while (1) {
-    __asm volatile("wfi");
-  }
+  while (1) { __asm volatile("wfi"); }
 }

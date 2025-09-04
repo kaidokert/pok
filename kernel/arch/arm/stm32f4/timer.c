@@ -21,9 +21,9 @@
 #include <errno.h>
 #include <libc.h>
 #include <core/time.h>
+#include <core/sched.h>
 #include "../nvic.h"
 #include "clock_config.h"
-
 /* SysTick registers */
 #define SYSTICK_BASE      0xE000E010
 #define SYSTICK_CSR       (*((volatile uint32_t *)(SYSTICK_BASE + 0x00)))

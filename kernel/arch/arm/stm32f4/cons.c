@@ -80,8 +80,7 @@ pok_ret_t pok_cons_init(void) {
   
   /* Configure pull-up for TX, no pull for RX (typical UART config) */
   GPIOA_PUPDR &= ~((3 << 18) | (3 << 20));   /* Clear pull bits */
-  GPIOA_PUPDR |= (1 << 18);                  /* PA9 (TX) pull-up, PA10 (RX) no pull */
-  
+  GPIOA_PUPDR |= (1 << 20);                  /* PA10 (RX) pull-up, PA9 (TX) no pull */
   /* Configure USART1 baud rate */
   /* For oversampling by 16: BRR = (mantissa << 4) + fraction */
   /* BRR_value = f_CK / (16 * baud_rate) */

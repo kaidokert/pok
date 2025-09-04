@@ -43,7 +43,7 @@
  * @return Context pointer on success, 0 on failure
  */
 uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
-                            uint32_t entry) {
+                            uintptr_t entry) {
   start_context_t *sp;
   char *stack_addr;
 
@@ -72,9 +72,8 @@ uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
 }
 
 /* Global variables for PendSV context switching - accessed by PendSV handler */
-uint32_t *g_old_sp_ptr = NULL;
-uint32_t g_new_sp = 0;
-
+uint32_t * volatile g_old_sp_ptr = NULL;
+volatile uint32_t g_new_sp = 0;
 /**
  * Perform ARM Cortex-M context switch between threads
  *

@@ -101,8 +101,7 @@ void SVC_Handler(void) {
    */
   syscall_id = (pok_syscall_id_t)frame[0]; /* r0 */
   syscall_args =
-      (pok_syscall_args_t *)(frame[1] + syscall_info.base_addr); /* r1 */
-
+      (pok_syscall_args_t *)(frame[1]); /* r1 */
   /*
    * Validate that the arguments pointer is within partition bounds
    */

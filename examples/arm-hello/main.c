@@ -42,8 +42,8 @@ void thread2_job(void) {
 
 int main(void) {
   pok_ret_t ret;
-  uint8_t tid1, tid2;
-  pok_thread_attr_t attr1, attr2;
+  uint32_t tid1, tid2;
+  pok_thread_attr_t attr1 = {0}, attr2 = {0};
   
   printf("POK ARM Cortex-M Hello World Example\n");
   printf("====================================\n");

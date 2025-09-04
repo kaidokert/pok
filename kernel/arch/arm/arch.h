@@ -44,7 +44,14 @@
 #define ARM_SVC_NUMBER_MASK          0xFF        /* SVC number in lower 8 bits */
 
 /* Priority Register Masks */
-#define ARM_PRIORITY_MASK            0xFFu       /* Priority field mask */
+#ifndef ARM_PRIORITY_BITS
+  #ifdef __NVIC_PRIO_BITS
+    #define ARM_PRIORITY_BITS __NVIC_PRIO_BITS
+  #else
+    #define ARM_PRIORITY_BITS 4 /* BSP default; override per SoC */
+  #endif
+#endif
+#define ARM_PRIORITY_MASK ((uint8_t)(0xFFu << (8 - ARM_PRIORITY_BITS)))
 
 /* Common Magic Values - for reference only, use descriptive names */
 #define ARM_MAGIC_DEAD               0xDEAD      /* Debug marker value */
