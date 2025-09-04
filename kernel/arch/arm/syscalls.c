@@ -157,7 +157,7 @@ void __attribute__((naked)) PendSV_Handler(void) {
 
       "2:                         \n"
       /* Ensure thread mode with PSP */
-      "ldr r0, =%0                \n" /* EXC_RETURN: Return to Thread, use PSP
+      "ldr r0, =0xFFFFFFFD        \n" /* EXC_RETURN: Return to Thread, use PSP
                                        */
       "bx r0                      \n" /* Return from exception */
 
