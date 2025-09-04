@@ -15,30 +15,31 @@
 /**
  * \file    arch/arm/arch.c
  * \author  POK team
- * \brief   Provides generic architecture interface for ARM Cortex-M architecture
+ * \brief   Provides generic architecture interface for ARM Cortex-M
+ * architecture
  */
 
 #include "mpu.h"
 #include "nvic.h"
+#include <arch.h>
 #include <core/partition.h>
 #include <errno.h>
-#include <arch.h>
 
 extern pok_ret_t pok_arch_space_init(void);
 
 pok_ret_t pok_arch_init() {
   pok_ret_t ret;
-  
+
   ret = pok_mpu_init();
   if (ret != POK_ERRNO_OK) {
     return (ret);
   }
-  
+
   ret = pok_nvic_init();
   if (ret != POK_ERRNO_OK) {
     return (ret);
   }
-  
+
   ret = pok_arch_space_init();
   if (ret != POK_ERRNO_OK) {
     return (ret);
@@ -48,18 +49,18 @@ pok_ret_t pok_arch_init() {
 }
 
 pok_ret_t pok_arch_preempt_disable() {
-  __asm volatile ("cpsid i" : : : "memory");
+  __asm volatile("cpsid i" : : : "memory");
   return (POK_ERRNO_OK);
 }
 
 pok_ret_t pok_arch_preempt_enable() {
-  __asm volatile ("cpsie i" : : : "memory");
+  __asm volatile("cpsie i" : : : "memory");
   return (POK_ERRNO_OK);
 }
 
 pok_ret_t pok_arch_idle() {
   while (1) {
-    __asm volatile ("wfi");
+    __asm volatile("wfi");
   }
 }
 
@@ -78,8 +79,8 @@ __attribute__((noreturn)) void pok_division_by_zero_error(void) {
   volatile int zero = 0;
   volatile int result = 42 / zero;
   (void)result;
-  
+
   while (1) {
-    __asm volatile ("wfi");
+    __asm volatile("wfi");
   }
 }

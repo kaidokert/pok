@@ -23,15 +23,15 @@
 #include <errno.h>
 #include <libc.h>
 
-#include "thread.h"
 #include "nvic.h"
+#include "thread.h"
 
 #define STACK_ALIGNMENT 8
 #define STACK_ALIGNMENT_MASK 0x7u
 
 /**
  * Create a thread context with proper ARM Cortex-M stack frame
- * 
+ *
  * @param thread_id Unique identifier for the thread
  * @param stack_size Size of stack to allocate in bytes
  * @param entry Entry point function address for the thread
@@ -53,12 +53,13 @@ uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
   memset(sp, 0, sizeof(start_context_t));
 
   /* Initialize context for thread startup */
-  sp->ctx.pc = (uint32_t)pok_arch_thread_start;  /* Start with thread wrapper */
-  sp->ctx.lr = 0xFFFFFFFD;                  /* Return to Thread mode, use PSP */
-  sp->ctx.xpsr = 0x01000000;                /* Thumb bit set */
+  sp->ctx.pc = (uint32_t)pok_arch_thread_start; /* Start with thread wrapper */
+  sp->ctx.lr = 0xFFFFFFFD;   /* Return to Thread mode, use PSP */
+  sp->ctx.xpsr = 0x01000000; /* Thumb bit set */
   /* Ensure 8-byte aligned stack pointer */
-  sp->ctx.sp = ((uint32_t)stack_addr + stack_size - STACK_ALIGNMENT) & ~STACK_ALIGNMENT_MASK;
-  
+  sp->ctx.sp = ((uint32_t)stack_addr + stack_size - STACK_ALIGNMENT) &
+               ~STACK_ALIGNMENT_MASK;
+
   sp->entry = entry;
   sp->id = thread_id;
 
@@ -71,31 +72,31 @@ uint32_t g_new_sp = 0;
 
 /**
  * Perform ARM Cortex-M context switch between threads
- * 
+ *
  * Uses PendSV exception for proper atomic context switching.
  * This function sets up the context switch parameters and triggers PendSV.
  * The actual context switch happens in the PendSV handler.
- * 
- * @param old_sp Pointer to store current thread's stack pointer  
+ *
+ * @param old_sp Pointer to store current thread's stack pointer
  * @param new_sp Stack pointer of thread to switch to
  */
 void pok_context_switch(uint32_t *old_sp, uint32_t new_sp) {
   if (old_sp == NULL) {
     return;
   }
-  
+
   /* Set up context switch parameters for PendSV handler */
   g_old_sp_ptr = old_sp;
   g_new_sp = new_sp;
-  
+
   /* Ensure memory operations complete before triggering PendSV */
-  __asm volatile ("dsb" ::: "memory");
-  
+  __asm volatile("dsb" ::: "memory");
+
   /* Trigger PendSV exception to perform context switch */
   SCB_ICSR |= SCB_ICSR_PENDSVSET;
-  
+
   /* Memory barrier to ensure PendSV is triggered */
-  __asm volatile ("dsb; isb" ::: "memory");
+  __asm volatile("dsb; isb" ::: "memory");
 }
 
 void pok_context_reset(uint32_t stack_size, uint32_t stack_addr) {
@@ -108,15 +109,16 @@ void pok_context_reset(uint32_t stack_size, uint32_t stack_addr) {
   /* Preserve thread information */
   id = sp->id;
   entry = sp->entry;
-  
+
   /* Reset context */
   memset(sp, 0, sizeof(start_context_t));
-  
+
   sp->ctx.pc = (uint32_t)pok_arch_thread_start;
   sp->ctx.lr = 0xFFFFFFFD;
   sp->ctx.xpsr = 0x01000000;
-  sp->ctx.sp = stack_addr + stack_size - STACK_ALIGNMENT;
-  
+  /* Ensure 8-byte aligned stack pointer */
+  sp->ctx.sp = ((stack_addr + stack_size - STACK_ALIGNMENT) & ~STACK_ALIGNMENT_MASK);
+
   sp->entry = entry;
   sp->id = id;
 }
@@ -128,14 +130,14 @@ void pok_context_reset(uint32_t stack_size, uint32_t stack_addr) {
 void pok_arch_thread_start(void) {
   start_context_t *ctx;
   uint32_t entry, thread_id;
-  
+
   /* Get current context from PSP */
-  __asm volatile ("mrs %0, psp" : "=r" (ctx));
-  
+  __asm volatile("mrs %0, psp" : "=r"(ctx));
+
   /* Extract thread information */
   entry = ctx->entry;
   thread_id = ctx->id;
-  
+
   /* Call POK core thread start function */
   pok_thread_start((void (*)(void))entry, thread_id);
 }

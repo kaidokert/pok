@@ -89,8 +89,18 @@ void *pok_bsp_mem_alloc(size_t size) {
   /* Align to 8-byte boundary */
   size = (size + MEMORY_ALIGNMENT_MASK) & ~MEMORY_ALIGNMENT_MASK;
   
-  /* Check if we have enough kernel memory remaining */
-  if (current_alloc_addr + size > KERNEL_MEMORY_BASE + KERNEL_MEMORY_SIZE) {
+  /* Check if we have enough kernel memory remaining - use subtraction to prevent overflow */
+  uint32_t kernel_end = KERNEL_MEMORY_BASE + KERNEL_MEMORY_SIZE;
+  
+  /* Additional sanity check: ensure current_alloc_addr is within valid kernel range */
+  if (current_alloc_addr < KERNEL_MEMORY_BASE || current_alloc_addr > kernel_end) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: Kernel allocator corrupted. current_alloc_addr=0x%x\n", current_alloc_addr);
+#endif
+    return (NULL);
+  }
+  
+  if (size > (kernel_end - current_alloc_addr)) {
 #ifdef POK_NEEDS_DEBUG
     printf("ERROR: Kernel memory exhausted. Requested: %u, Available: %u\n",
            size, (KERNEL_MEMORY_BASE + KERNEL_MEMORY_SIZE) - current_alloc_addr);
