@@ -103,14 +103,21 @@ pok_ret_t pok_nvic_set_priority(uint8_t irq, uint8_t priority) {
     uint8_t reg_offset;
     
     if (irq >= 4 && irq <= 6) {
+      /* MemManage (4), BusFault (5), UsageFault (6) */
       shpr_reg = (uint32_t *)&SCB_SHPR1;
       reg_offset = (irq - 4) * 8;
-    } else if (irq >= 11 && irq <= 12) {
+    } else if (irq == 11) {
+      /* SVCall (11) only */
       shpr_reg = (uint32_t *)&SCB_SHPR2;
-      reg_offset = (irq - 11) * 8;  /* Fixed: was (irq - 8) */
-    } else if (irq >= 14 && irq <= 15) {
+      reg_offset = 0;  /* SVCall is at bits [7:0] of SHPR2 */
+    } else if (irq == 12 || (irq >= 14 && irq <= 15)) {
+      /* DebugMon (12), PendSV (14), SysTick (15) */
       shpr_reg = (uint32_t *)&SCB_SHPR3;
-      reg_offset = (irq - 14) * 8;  /* Fixed: was (irq - 12) */
+      if (irq == 12) {
+        reg_offset = 0;  /* DebugMon is at bits [7:0] of SHPR3 */
+      } else {
+        reg_offset = (irq - 14) * 8 + 8;  /* PendSV at [15:8], SysTick at [23:16] */
+      }
     } else {
       return (POK_ERRNO_EINVAL);
     }

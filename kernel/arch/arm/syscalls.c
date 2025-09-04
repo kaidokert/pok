@@ -100,15 +100,40 @@ syscall_exit:
 
 /*
  * PendSV Handler - handles context switches
+ * This is called when pok_context_switch() triggers the PendSV exception
  */
-void PendSV_Handler(void) {
-  /* Context switching is handled by the scheduler */
-  /* This handler completes the context switch initiated by pok_context_switch */
+void __attribute__((naked)) PendSV_Handler(void) {
+  /* Access global variables from thread.c */
+  extern uint32_t *g_old_sp_ptr;
+  extern uint32_t g_new_sp;
   
   __asm volatile (
-    /* Context switch is already prepared by pok_context_switch */
-    /* Just return to continue with new context */
-    "bx lr"
+    /* Save current thread context */
+    "mrs r0, psp                \n"  /* Get current Process Stack Pointer */
+    "cbz r0, 1f                 \n"  /* Skip if PSP is NULL (first time) */
+    
+    "stmdb r0!, {r4-r11}        \n"  /* Save r4-r11 (caller-saved regs) to stack */
+    
+    /* Store updated PSP to old thread's stack pointer */
+    "ldr r1, =g_old_sp_ptr      \n"  /* Load address of g_old_sp_ptr */
+    "ldr r1, [r1]               \n"  /* Load g_old_sp_ptr value */
+    "cbz r1, 1f                 \n"  /* Skip if NULL */
+    "str r0, [r1]               \n"  /* Store new PSP value */
+    
+    "1:                         \n"  /* Load new thread context */
+    "ldr r0, =g_new_sp          \n"  /* Load address of g_new_sp */
+    "ldr r0, [r0]               \n"  /* Load g_new_sp value */
+    "cbz r0, 2f                 \n"  /* Skip if NULL */
+    
+    "ldmia r0!, {r4-r11}        \n"  /* Restore r4-r11 from new thread's stack */
+    "msr psp, r0                \n"  /* Set new Process Stack Pointer */
+    
+    "2:                         \n"
+    /* Ensure thread mode with PSP */
+    "ldr r0, =0xFFFFFFFD        \n"  /* EXC_RETURN: Return to Thread, use PSP */
+    "bx r0                      \n"  /* Return from exception */
+    
+    ::: "memory"
   );
 }
 

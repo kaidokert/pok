@@ -24,6 +24,7 @@
 #include <libc.h>
 
 #include "thread.h"
+#include "nvic.h"
 
 #define STACK_ALIGNMENT 8
 #define STACK_ALIGNMENT_MASK 0x7u
@@ -64,13 +65,18 @@ uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
   return ((uint32_t)sp);
 }
 
+/* Global variables for PendSV context switching - accessed by PendSV handler */
+uint32_t *g_old_sp_ptr = NULL;
+uint32_t g_new_sp = 0;
+
 /**
  * Perform ARM Cortex-M context switch between threads
  * 
- * Saves current thread context (r4-r11) and loads new thread context.
- * Uses PendSV exception for atomic context switching.
+ * Uses PendSV exception for proper atomic context switching.
+ * This function sets up the context switch parameters and triggers PendSV.
+ * The actual context switch happens in the PendSV handler.
  * 
- * @param old_sp Pointer to store current thread's stack pointer
+ * @param old_sp Pointer to store current thread's stack pointer  
  * @param new_sp Stack pointer of thread to switch to
  */
 void pok_context_switch(uint32_t *old_sp, uint32_t new_sp) {
@@ -78,36 +84,18 @@ void pok_context_switch(uint32_t *old_sp, uint32_t new_sp) {
     return;
   }
   
-  __asm volatile (
-    /* Disable interrupts */
-    "cpsid i                    \n"
-    
-    /* Save current context */
-    "mrs r2, psp                \n"  /* Get current PSP */
-    "stmdb r2!, {r4-r11}        \n"  /* Save r4-r11 to stack */
-    "str r2, [%1]               \n"  /* Store new PSP to old_sp */
-    
-    /* Load new context */
-    "mov r2, %0                 \n"  /* Load new PSP */
-    "ldmia r2!, {r4-r11}        \n"  /* Restore r4-r11 from stack */
-    "msr psp, r2                \n"  /* Set new PSP */
-    
-    /* Re-enable interrupts */
-    "cpsie i                    \n"
-    
-    /* Trigger PendSV to complete context switch */
-    "ldr r2, =0xE000ED04        \n"  /* SCB->ICSR */
-    "ldr r3, =0x10000000        \n"  /* PENDSVSET bit */
-    "str r3, [r2]               \n"  /* Trigger PendSV */
-    "dsb                        \n"  /* Data synchronization barrier */
-    "isb                        \n"  /* Instruction synchronization barrier */
-    
-    :                                /* No outputs */
-    : "r" (new_sp), "r" (old_sp)     /* Input: new_sp register and old_sp pointer */
-    : "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r11", "memory"
-  );
+  /* Set up context switch parameters for PendSV handler */
+  g_old_sp_ptr = old_sp;
+  g_new_sp = new_sp;
   
-  /* Note: The actual value storage happens in the assembly above */
+  /* Ensure memory operations complete before triggering PendSV */
+  __asm volatile ("dsb" ::: "memory");
+  
+  /* Trigger PendSV exception to perform context switch */
+  SCB_ICSR |= SCB_ICSR_PENDSVSET;
+  
+  /* Memory barrier to ensure PendSV is triggered */
+  __asm volatile ("dsb; isb" ::: "memory");
 }
 
 void pok_context_reset(uint32_t stack_size, uint32_t stack_addr) {

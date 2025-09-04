@@ -50,7 +50,8 @@
 /* GPIO registers for USART pins */
 #define GPIOA_BASE        0x40020000
 #define GPIOA_MODER       (*((volatile uint32_t *)(GPIOA_BASE + 0x00)))
-#define GPIOA_AFRL        (*((volatile uint32_t *)(GPIOA_BASE + 0x20)))
+#define GPIOA_AFRL        (*((volatile uint32_t *)(GPIOA_BASE + 0x20)))  /* AF[7:0] */
+#define GPIOA_AFRH        (*((volatile uint32_t *)(GPIOA_BASE + 0x24)))  /* AF[15:8] */
 
 pok_ret_t pok_cons_init(void) {
   /* Enable GPIOA and USART1 clocks */
@@ -58,17 +59,22 @@ pok_ret_t pok_cons_init(void) {
   RCC_APB2ENR |= RCC_APB2ENR_USART1EN;
   
   /* Configure PA9 (TX) and PA10 (RX) as alternate function */
-  GPIOA_MODER &= ~((3 << 18) | (3 << 20));  /* Clear mode bits */
+  GPIOA_MODER &= ~((3 << 18) | (3 << 20));  /* Clear mode bits for PA9, PA10 */
   GPIOA_MODER |= (2 << 18) | (2 << 20);     /* Set alternate function mode */
   
   /* Set alternate function 7 (USART) for PA9 and PA10 */
-  GPIOA_AFRL &= ~((0xF << 4) | (0xF << 8)); /* Clear AF bits */
-  GPIOA_AFRL |= (7 << 4) | (7 << 8);        /* Set AF7 */
+  /* PA9 = pin 9 (AFRH bit 4-7), PA10 = pin 10 (AFRH bit 8-11) */
+  GPIOA_AFRH &= ~((0xF << 4) | (0xF << 8));  /* Clear AF bits in AFRH register */
+  GPIOA_AFRH |= (7 << 4) | (7 << 8);         /* Set AF7 for PA9 and PA10 */
   
-  /* Configure USART1 */
-  /* TODO: Calculate baud rate dynamically based on actual system clock frequency */
-  /* BRR = fck / (16 * baud_rate) for oversampling by 16 */
-  USART1_BRR = 16000000 / (16 * 115200);
+  /* Configure USART1 baud rate */
+  /* For oversampling by 16: BRR = (mantissa << 4) + fraction */
+  /* BRR_value = f_CK / (16 * baud_rate) */
+  uint32_t apb2_clock = 16000000;  /* Assuming 16MHz APB2 clock */
+  uint32_t baud_rate = 115200;
+  uint32_t brr_value = (apb2_clock + (8 * baud_rate)) / (16 * baud_rate);  /* Rounded division */
+  
+  USART1_BRR = brr_value;
   
   /* Enable USART, transmitter, and receiver */
   USART1_CR1 = USART_CR1_UE | USART_CR1_TE | USART_CR1_RE;

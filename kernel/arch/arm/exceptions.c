@@ -29,18 +29,35 @@
 #define CFSR_MMARVALID  (1 << 7)   /* MemManage Fault Address Register valid */
 #define CFSR_BFARVALID  (1 << 15)  /* Bus Fault Address Register valid */
 
+/* Forward declarations for the actual handlers */
+static void MemManage_Handler_C(uint32_t *frame);
+static void BusFault_Handler_C(uint32_t *frame);
+static void UsageFault_Handler_C(uint32_t *frame);
+static void HardFault_Handler_C(uint32_t *frame);
+
 /*
- * Memory Management Fault Handler
+ * Memory Management Fault Handler - Naked wrapper
+ * Determines correct stack pointer (MSP vs PSP) based on EXC_RETURN
+ */
+void __attribute__((naked)) MemManage_Handler(void) {
+  __asm volatile (
+    "tst lr, #4                 \n"  /* Test EXC_RETURN[2] */
+    "ite eq                     \n"  /* If-Then-Else */
+    "mrseq r0, msp              \n"  /* If EXC_RETURN[2]==0, use MSP */
+    "mrsne r0, psp              \n"  /* If EXC_RETURN[2]==1, use PSP */
+    "b MemManage_Handler_C      \n"  /* Call C handler with correct frame */
+    ::: "r0", "memory"
+  );
+}
+
+/*
+ * Memory Management Fault Handler - C implementation
  * Handles MPU violations and other memory management faults
  */
-void MemManage_Handler(void) {
-  uint32_t *frame;
+static void MemManage_Handler_C(uint32_t *frame) {
   uint32_t fault_addr = 0;
   uint8_t partition_id;
   uint32_t cfsr;
-  
-  /* Get stack frame */
-  __asm volatile ("mrs %0, psp" : "=r" (frame));
   
   if (frame == NULL) {
     /* Cannot recover from null frame, halt system */
@@ -91,16 +108,28 @@ void MemManage_Handler(void) {
 }
 
 /*
- * Bus Fault Handler
+ * Bus Fault Handler - Naked wrapper
+ * Determines correct stack pointer (MSP vs PSP) based on EXC_RETURN
+ */
+void __attribute__((naked)) BusFault_Handler(void) {
+  __asm volatile (
+    "tst lr, #4                 \n"  /* Test EXC_RETURN[2] */
+    "ite eq                     \n"  /* If-Then-Else */
+    "mrseq r0, msp              \n"  /* If EXC_RETURN[2]==0, use MSP */
+    "mrsne r0, psp              \n"  /* If EXC_RETURN[2]==1, use PSP */
+    "b BusFault_Handler_C       \n"  /* Call C handler with correct frame */
+    ::: "r0", "memory"
+  );
+}
+
+/*
+ * Bus Fault Handler - C implementation
  * Handles bus errors and invalid memory accesses
  */
-void BusFault_Handler(void) {
-  uint32_t *frame;
+static void BusFault_Handler_C(uint32_t *frame) {
   uint32_t fault_addr = 0;
   uint8_t partition_id;
   uint32_t cfsr;
-  
-  __asm volatile ("mrs %0, psp" : "=r" (frame));
   
   if (frame == NULL) {
     while (1) {
@@ -144,14 +173,26 @@ void BusFault_Handler(void) {
 }
 
 /*
- * Usage Fault Handler  
+ * Usage Fault Handler - Naked wrapper  
+ * Determines correct stack pointer (MSP vs PSP) based on EXC_RETURN
+ */
+void __attribute__((naked)) UsageFault_Handler(void) {
+  __asm volatile (
+    "tst lr, #4                 \n"  /* Test EXC_RETURN[2] */
+    "ite eq                     \n"  /* If-Then-Else */
+    "mrseq r0, msp              \n"  /* If EXC_RETURN[2]==0, use MSP */
+    "mrsne r0, psp              \n"  /* If EXC_RETURN[2]==1, use PSP */
+    "b UsageFault_Handler_C     \n"  /* Call C handler with correct frame */
+    ::: "r0", "memory"
+  );
+}
+
+/*
+ * Usage Fault Handler - C implementation
  * Handles undefined instruction, unaligned access, etc.
  */
-void UsageFault_Handler(void) {
-  uint32_t *frame;
+static void UsageFault_Handler_C(uint32_t *frame) {
   uint8_t partition_id;
-  
-  __asm volatile ("mrs %0, psp" : "=r" (frame));
   
   if (frame == NULL) {
     while (1) {
@@ -181,11 +222,26 @@ void UsageFault_Handler(void) {
  * Hard Fault Handler
  * Last resort fault handler
  */
-void HardFault_Handler(void) {
-  uint32_t *frame;
+/*
+ * Hard Fault Handler - Naked wrapper
+ * Determines correct stack pointer (MSP vs PSP) based on EXC_RETURN
+ */
+void __attribute__((naked)) HardFault_Handler(void) {
+  __asm volatile (
+    "tst lr, #4                 \n"  /* Test EXC_RETURN[2] */
+    "ite eq                     \n"  /* If-Then-Else */
+    "mrseq r0, msp              \n"  /* If EXC_RETURN[2]==0, use MSP */
+    "mrsne r0, psp              \n"  /* If EXC_RETURN[2]==1, use PSP */
+    "b HardFault_Handler_C      \n"  /* Call C handler with correct frame */
+    ::: "r0", "memory"
+  );
+}
+
+/*
+ * Hard Fault Handler - C implementation
+ */
+static void HardFault_Handler_C(uint32_t *frame) {
   uint8_t partition_id;
-  
-  __asm volatile ("mrs %0, psp" : "=r" (frame));
   
   if (frame == NULL) {
     while (1) {
