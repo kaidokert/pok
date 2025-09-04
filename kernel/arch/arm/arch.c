@@ -29,12 +29,19 @@ extern pok_ret_t pok_arch_space_init(void);
 pok_ret_t pok_arch_init() {
   pok_ret_t ret;
   
-  pok_mpu_init();
-  pok_nvic_init();
+  ret = pok_mpu_init();
+  if (ret != POK_ERRNO_OK) {
+    return (ret);
+  }
+  
+  ret = pok_nvic_init();
+  if (ret != POK_ERRNO_OK) {
+    return (ret);
+  }
   
   ret = pok_arch_space_init();
   if (ret != POK_ERRNO_OK) {
-    return ret;
+    return (ret);
   }
 
   return (POK_ERRNO_OK);
@@ -57,7 +64,7 @@ pok_ret_t pok_arch_idle() {
 }
 
 pok_ret_t pok_arch_event_register(uint8_t vector, void (*handler)(void)) {
-  return pok_nvic_set_handler(vector, handler);
+  return (pok_nvic_set_handler(vector, handler));
 }
 
 uint32_t pok_thread_stack_addr(const uint8_t partition_id,

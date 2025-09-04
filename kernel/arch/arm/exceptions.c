@@ -42,6 +42,13 @@ void MemManage_Handler(void) {
   /* Get stack frame */
   __asm volatile ("mrs %0, psp" : "=r" (frame));
   
+  if (frame == NULL) {
+    /* Cannot recover from null frame, halt system */
+    while (1) {
+      __asm volatile ("wfi");
+    }
+  }
+  
   /* Read CFSR to check fault status */
   cfsr = SCB_CFSR;
   
@@ -74,7 +81,7 @@ void MemManage_Handler(void) {
     pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED);
     
     /* Force a reschedule to switch away from this partition */
-    pok_sched();
+    pok_sched_end_period();
   }
   
   /* If we reach here, halt the system */
@@ -94,6 +101,12 @@ void BusFault_Handler(void) {
   uint32_t cfsr;
   
   __asm volatile ("mrs %0, psp" : "=r" (frame));
+  
+  if (frame == NULL) {
+    while (1) {
+      __asm volatile ("wfi");
+    }
+  }
   
   /* Read CFSR to check fault status */
   cfsr = SCB_CFSR;
@@ -122,7 +135,7 @@ void BusFault_Handler(void) {
   
   if (partition_id < POK_CONFIG_NB_PARTITIONS) {
     pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED);
-    pok_sched();
+    pok_sched_end_period();
   }
   
   while (1) {
@@ -140,6 +153,12 @@ void UsageFault_Handler(void) {
   
   __asm volatile ("mrs %0, psp" : "=r" (frame));
   
+  if (frame == NULL) {
+    while (1) {
+      __asm volatile ("wfi");
+    }
+  }
+  
   extern uint8_t pok_current_partition;
   partition_id = pok_current_partition;
   
@@ -150,7 +169,7 @@ void UsageFault_Handler(void) {
   
   if (partition_id < POK_CONFIG_NB_PARTITIONS) {
     pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED);
-    pok_sched();
+    pok_sched_end_period();
   }
   
   while (1) {
@@ -168,6 +187,12 @@ void HardFault_Handler(void) {
   
   __asm volatile ("mrs %0, psp" : "=r" (frame));
   
+  if (frame == NULL) {
+    while (1) {
+      __asm volatile ("wfi");
+    }
+  }
+  
   extern uint8_t pok_current_partition;
   partition_id = pok_current_partition;
   
@@ -181,7 +206,7 @@ void HardFault_Handler(void) {
   /* Try to recover by stopping the current partition */
   if (partition_id < POK_CONFIG_NB_PARTITIONS) {
     pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED);
-    pok_sched();
+    pok_sched_end_period();
   }
   
   /* If recovery fails, halt the system */

@@ -22,6 +22,10 @@
 #include <bsp.h>
 #include <libc.h>
 
+/* Forward declarations for STM32F4 specific functions */
+pok_ret_t pok_cons_init(void);
+pok_ret_t pok_timer_init(void);
+
 /* STM32F4 specific defines */
 #define STM32F4_FLASH_BASE    0x08000000
 #define STM32F4_SRAM_BASE     0x20000000
@@ -33,14 +37,26 @@
 #define USER_MEMORY_BASE      (STM32F4_SRAM_BASE + KERNEL_MEMORY_SIZE)
 #define USER_MEMORY_SIZE      (STM32F4_SRAM_SIZE - KERNEL_MEMORY_SIZE)
 
+/* Memory alignment constants */
+#define MEMORY_ALIGNMENT 8
+#define MEMORY_ALIGNMENT_MASK 7
+
 /* Simple kernel memory allocator - allocates from kernel space for stacks, etc. */
 static uint32_t current_alloc_addr = KERNEL_MEMORY_BASE;
 
+/**
+ * Initialize STM32F4 Board Support Package
+ * 
+ * Sets up system clocks, console UART, and system timer.
+ * Must be called early in system initialization.
+ * 
+ * @return POK_ERRNO_OK on success, error code on failure
+ */
 pok_ret_t pok_bsp_init(void) {
   pok_ret_t ret;
   
   /* Initialize system clocks */
-  /* In a real implementation, this would configure the STM32F4 clocks */
+  /* TODO: Configure STM32F4 PLL, HSE/HSI, and peripheral clocks for optimal performance */
   
   /* Initialize console */
   ret = pok_cons_init();
@@ -48,7 +64,7 @@ pok_ret_t pok_bsp_init(void) {
 #ifdef POK_NEEDS_DEBUG
     printf("ERROR: Console initialization failed: %d\n", ret);
 #endif
-    return ret;
+    return (ret);
   }
   
   /* Initialize timer */
@@ -57,17 +73,21 @@ pok_ret_t pok_bsp_init(void) {
 #ifdef POK_NEEDS_DEBUG
     printf("ERROR: Timer initialization failed: %d\n", ret);
 #endif
-    return ret;
+    return (ret);
   }
   
-  return POK_ERRNO_OK;
+  return (POK_ERRNO_OK);
 }
 
-char *pok_bsp_mem_alloc(uint32_t size) {
-  char *ret;
+void *pok_bsp_mem_alloc(size_t size) {
+  void *ret;
+  
+  if (size == 0) {
+    return (NULL);
+  }
   
   /* Align to 8-byte boundary */
-  size = (size + 7) & ~7;
+  size = (size + MEMORY_ALIGNMENT_MASK) & ~MEMORY_ALIGNMENT_MASK;
   
   /* Check if we have enough kernel memory remaining */
   if (current_alloc_addr + size > KERNEL_MEMORY_BASE + KERNEL_MEMORY_SIZE) {
@@ -75,31 +95,31 @@ char *pok_bsp_mem_alloc(uint32_t size) {
     printf("ERROR: Kernel memory exhausted. Requested: %u, Available: %u\n",
            size, (KERNEL_MEMORY_BASE + KERNEL_MEMORY_SIZE) - current_alloc_addr);
 #endif
-    return NULL;
+    return (NULL);
   }
   
-  ret = (char *)current_alloc_addr;
+  ret = (void *)current_alloc_addr;
   current_alloc_addr += size;
   
 #ifdef POK_NEEDS_DEBUG
   printf("Allocated %u bytes at 0x%x (kernel space)\n", size, (uint32_t)ret);
 #endif
   
-  return ret;
+  return (ret);
 }
 
-uint32_t pok_bsp_mem_base(void) {
-  return USER_MEMORY_BASE;
+inline uint32_t pok_bsp_mem_base(void) {
+  return (USER_MEMORY_BASE);
 }
 
-uint32_t pok_bsp_mem_size(void) {
-  return USER_MEMORY_SIZE;
+inline uint32_t pok_bsp_mem_size(void) {
+  return (USER_MEMORY_SIZE);
 }
 
-uint32_t pok_bsp_kernel_base(void) {
-  return KERNEL_MEMORY_BASE;
+inline uint32_t pok_bsp_kernel_base(void) {
+  return (KERNEL_MEMORY_BASE);
 }
 
-uint32_t pok_bsp_kernel_size(void) {
-  return KERNEL_MEMORY_SIZE;
+inline uint32_t pok_bsp_kernel_size(void) {
+  return (KERNEL_MEMORY_SIZE);
 }

@@ -57,6 +57,6 @@ typedef struct {
 uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size, uint32_t entry);
 void pok_context_switch(uint32_t *old_sp, uint32_t new_sp);
 void pok_context_reset(uint32_t stack_size, uint32_t stack_addr);
-void pok_thread_start(void);
+void pok_arch_thread_start(void);
 
 #endif /* !__POK_ARM_THREAD_H__ */

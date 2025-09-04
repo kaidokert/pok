@@ -29,6 +29,9 @@
 #include "thread.h"
 
 #define KERNEL_STACK_SIZE 4096
+#define MPU_MIN_REGION_SIZE 32
+#define MEMORY_WASTE_THRESHOLD_PERCENT 25
+#define STACK_ALIGNMENT_MASK 0x7u
 
 /* Partition space information */
 struct pok_space {
@@ -39,6 +42,14 @@ struct pok_space {
 
 struct pok_space spaces[POK_CONFIG_NB_PARTITIONS];
 
+/**
+ * Create a memory space for a partition using MPU protection
+ * 
+ * @param partition_id ID of the partition (0 to POK_CONFIG_NB_PARTITIONS-1)
+ * @param addr Base address of the partition memory space
+ * @param size Size of the partition memory space
+ * @return POK_ERRNO_OK on success, error code on failure
+ */
 pok_ret_t pok_create_space(uint8_t partition_id, uint32_t addr, uint32_t size) {
   uint32_t mpu_attributes;
   uint8_t region_id;
@@ -62,14 +73,20 @@ pok_ret_t pok_create_space(uint8_t partition_id, uint32_t addr, uint32_t size) {
   mpu_attributes = (MPU_AP_ALL_RW << MPU_RASR_AP_SHIFT) | MPU_ATTR_NORMAL;
   
   /* Align size to power of 2 (MPU requirement) */
-  uint32_t aligned_size = 32;
-  while (aligned_size < size) {
-    aligned_size <<= 1;
+  uint32_t aligned_size;
+  if (size <= MPU_MIN_REGION_SIZE) {
+    aligned_size = MPU_MIN_REGION_SIZE;
+  } else {
+    /* Optimize: use bit manipulation to find next power of 2 */
+    aligned_size = 1;
+    while (aligned_size < size) {
+      aligned_size <<= 1;
+    }
   }
   
   /* Security check: warn if alignment exposes significant unused memory */
   uint32_t exposed_memory = aligned_size - size;
-  if (exposed_memory > (size / 4)) {  /* More than 25% waste */
+  if (exposed_memory > (size / (100 / MEMORY_WASTE_THRESHOLD_PERCENT))) {
 #ifdef POK_NEEDS_DEBUG
     printf("WARNING: Partition %d MPU alignment exposes %u bytes of unused memory\n", 
            partition_id, exposed_memory);
@@ -122,10 +139,11 @@ pok_ret_t pok_space_switch(uint8_t old_partition_id, uint8_t new_partition_id) {
 
 uint32_t pok_space_base_vaddr(uint32_t addr) {
   /* ARM Cortex-M uses flat memory model - no virtual addressing */
-  return addr;
+  return (addr);
 }
 
 uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,
+                                  uint8_t processor_affinity,
                                   uint32_t stack_rel, uint32_t arg1,
                                   uint32_t arg2) {
   context_t *ctx;
@@ -133,13 +151,16 @@ uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,
   uint32_t entry_abs, stack_abs;
   
   if (partition_id >= POK_CONFIG_NB_PARTITIONS) {
-    return 0;
+    return (0);
   }
+  
+  /* ARM Cortex-M is single-core, ignore processor_affinity but validate it */
+  (void)processor_affinity;  /* Suppress unused parameter warning */
   
   /* Allocate kernel stack */
   stack_addr = pok_bsp_mem_alloc(KERNEL_STACK_SIZE);
   if (!stack_addr) {
-    return 0;
+    return (0);
   }
   
   /* Calculate absolute addresses */
@@ -153,7 +174,7 @@ uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,
   /* Initialize ARM Cortex-M context */
   ctx->r0 = arg1;                    /* First argument */
   ctx->r1 = arg2;                    /* Second argument */
-  ctx->sp = stack_abs & ~0x7u;       /* User stack pointer (8-byte aligned) */
+  ctx->sp = stack_abs & ~STACK_ALIGNMENT_MASK;       /* User stack pointer (8-byte aligned) */
   ctx->lr = 0xFFFFFFFD;              /* Return to Thread mode, use PSP */
   ctx->pc = entry_abs;               /* Entry point */
   ctx->xpsr = 0x01000000;            /* Thumb bit set */
@@ -186,5 +207,5 @@ pok_ret_t pok_arch_space_init(void) {
   printf("pok_arch_space_init: MPU regions=%d\n", pok_mpu_get_region_count());
 #endif
   
-  return POK_ERRNO_OK;
+  return (POK_ERRNO_OK);
 }

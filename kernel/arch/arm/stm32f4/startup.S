@@ -30,7 +30,7 @@ stack_mem:
 .equ    __StackTop, stack_mem + Stack_Size
 
 /* Vector table */
-.section ".vectors", "a"
+.section ".isr_vector", "a"
 .align 2
 .globl vector_table
 vector_table:
@@ -69,14 +69,14 @@ Reset_Handler:
     mov sp, r0
     
     /* Initialize data section */
-    ldr r0, =__data_start__
-    ldr r1, =__data_end__
-    ldr r2, =__data_load__
+    ldr r0, =_sdata
+    ldr r1, =_edata
+    ldr r2, =_sidata
     bl  copy_data
     
     /* Initialize BSS section */
-    ldr r0, =__bss_start__
-    ldr r1, =__bss_end__
+    ldr r0, =_sbss
+    ldr r1, =_ebss
     bl  clear_bss
     
     /* Call main POK kernel initialization */
@@ -88,28 +88,28 @@ hang:
 
 /* Copy data section from flash to RAM */
 copy_data:
-    subs r1, r1, r0        /* Calculate size */
-    ble copy_data_done     /* If size <= 0, skip */
+    cmp r0, r1            /* Compare start and end */
+    bge copy_data_done    /* If start >= end, skip */
 copy_data_loop:
     ldr r3, [r2]          /* Load from flash */
     str r3, [r0]          /* Store to RAM */
     adds r0, r0, #4       /* Increment RAM pointer */
     adds r2, r2, #4       /* Increment flash pointer */
-    subs r1, r1, #4       /* Decrement size */
-    bgt copy_data_loop    /* Continue if size > 0 */
+    cmp r0, r1            /* Compare with end address */
+    blt copy_data_loop    /* Continue if not at end */
 copy_data_done:
     bx lr
 
 /* Clear BSS section */
 clear_bss:
     movs r2, #0           /* Clear value */
-    subs r1, r1, r0       /* Calculate size */
-    ble clear_bss_done    /* If size <= 0, skip */
+    cmp r0, r1            /* Compare start and end */
+    bge clear_bss_done    /* If start >= end, skip */
 clear_bss_loop:
     str r2, [r0]          /* Clear word */
     adds r0, r0, #4       /* Increment pointer */
-    subs r1, r1, #4       /* Decrement size */
-    bgt clear_bss_loop    /* Continue if size > 0 */
+    cmp r0, r1            /* Compare with end address */
+    blt clear_bss_loop    /* Continue if not at end */
 clear_bss_done:
     bx lr
 

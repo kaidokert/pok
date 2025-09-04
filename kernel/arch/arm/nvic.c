@@ -26,7 +26,7 @@
 extern vector_table_entry_t vector_table[];
 
 /* Default handlers */
-static void default_handler(void) {
+static void pok_nvic_default_handler(void) {
   /* Default handler - infinite loop */
   while (1) {
     __asm volatile ("wfi");
@@ -56,7 +56,7 @@ pok_ret_t pok_nvic_set_handler(uint8_t irq, void (*handler)(void)) {
   
   /* Set handler in vector table */
   if (handler == NULL) {
-    vector_table[irq] = default_handler;
+    vector_table[irq] = pok_nvic_default_handler;
   } else {
     vector_table[irq] = handler;
   }
@@ -103,13 +103,13 @@ pok_ret_t pok_nvic_set_priority(uint8_t irq, uint8_t priority) {
     uint8_t reg_offset;
     
     if (irq >= 4 && irq <= 6) {
-      shpr_reg = &SCB_SHPR1;
+      shpr_reg = (uint32_t *)&SCB_SHPR1;
       reg_offset = (irq - 4) * 8;
     } else if (irq >= 11 && irq <= 12) {
-      shpr_reg = &SCB_SHPR2;
+      shpr_reg = (uint32_t *)&SCB_SHPR2;
       reg_offset = (irq - 11) * 8;  /* Fixed: was (irq - 8) */
     } else if (irq >= 14 && irq <= 15) {
-      shpr_reg = &SCB_SHPR3;
+      shpr_reg = (uint32_t *)&SCB_SHPR3;
       reg_offset = (irq - 14) * 8;  /* Fixed: was (irq - 12) */
     } else {
       return (POK_ERRNO_EINVAL);
@@ -158,9 +158,9 @@ pok_ret_t pok_nvic_set_vector_table(uint32_t offset) {
 
 /* Default exception handlers */
 void NMI_Handler(void) {
-  default_handler();
+  pok_nvic_default_handler();
 }
 
 void DebugMon_Handler(void) {
-  default_handler();
+  pok_nvic_default_handler();
 }

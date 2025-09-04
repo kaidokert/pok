@@ -25,6 +25,12 @@
 static uint8_t mpu_region_count = 0;
 static mpu_region_t mpu_regions[MPU_MAX_REGIONS];
 
+/**
+ * Initialize the Memory Protection Unit (MPU)
+ * Detects available MPU regions and sets up initial configuration
+ * 
+ * @return POK_ERRNO_OK on success, POK_ERRNO_UNAVAILABLE if no MPU present
+ */
 pok_ret_t pok_mpu_init(void) {
   uint32_t mpu_type;
   
@@ -57,6 +63,15 @@ pok_ret_t pok_mpu_init(void) {
   return (POK_ERRNO_OK);
 }
 
+/**
+ * Configure an MPU region with specified protection attributes
+ * 
+ * @param region MPU region number (0-7 typically)
+ * @param base_addr Base address of the region (must be aligned to size)
+ * @param size Size of the region (must be power of 2, minimum 32 bytes)
+ * @param attributes Access permissions and memory attributes
+ * @return POK_ERRNO_OK on success, error code on failure
+ */
 pok_ret_t pok_mpu_configure_region(uint8_t region, uint32_t base_addr, 
                                    uint32_t size, uint32_t attributes) {
   uint32_t rasr;
@@ -145,8 +160,8 @@ pok_ret_t pok_mpu_disable(void) {
   return (POK_ERRNO_OK);
 }
 
-uint8_t pok_mpu_get_region_count(void) {
-  return mpu_region_count;
+inline uint8_t pok_mpu_get_region_count(void) {
+  return (mpu_region_count);
 }
 
 uint32_t pok_mpu_size_to_rasr(uint32_t size) {
@@ -154,7 +169,7 @@ uint32_t pok_mpu_size_to_rasr(uint32_t size) {
   
   /* Size must be power of 2 and >= 32 bytes */
   if (size < 32 || (size & (size - 1)) != 0) {
-    return 0; /* Invalid size */
+    return (0); /* Invalid size */
   }
   
   /* Calculate size field (log2(size) - 1) */

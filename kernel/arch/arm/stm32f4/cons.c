@@ -66,7 +66,7 @@ pok_ret_t pok_cons_init(void) {
   GPIOA_AFRL |= (7 << 4) | (7 << 8);        /* Set AF7 */
   
   /* Configure USART1 */
-  /* Assuming 16MHz clock, set baud rate to 115200 */
+  /* TODO: Calculate baud rate dynamically based on actual system clock frequency */
   /* BRR = fck / (16 * baud_rate) for oversampling by 16 */
   USART1_BRR = 16000000 / (16 * 115200);
   
@@ -77,6 +77,10 @@ pok_ret_t pok_cons_init(void) {
 }
 
 pok_ret_t pok_cons_write(const char *s, size_t length) {
+  if (s == NULL) {
+    return (POK_ERRNO_EINVAL);
+  }
+  
   for (size_t i = 0; i < length; i++) {
     /* Wait for transmit data register to be empty */
     while (!(USART1_SR & USART_SR_TXE)) {
@@ -91,6 +95,10 @@ pok_ret_t pok_cons_write(const char *s, size_t length) {
 }
 
 pok_ret_t pok_cons_read(char *s, size_t length) {
+  if (s == NULL) {
+    return (POK_ERRNO_EINVAL);
+  }
+  
   for (size_t i = 0; i < length; i++) {
     /* Wait for receive data register to have data */
     while (!(USART1_SR & USART_SR_RXNE)) {

@@ -67,6 +67,18 @@ my %tools_common =
  );
 
 my %tools_arch;
+$tools_arch{"arm"} =
+{
+ "AR" 	      =>  ["arm-none-eabi-ar", "arm-elf-ar", "ar"],
+ "CC"          =>  ["arm-none-eabi-gcc", "arm-elf-gcc", "gcc"],
+ "CXX"	      =>  ["arm-none-eabi-g++", "arm-elf-g++", "g++"],
+ "LD"	         =>  ["arm-none-eabi-ld", "arm-elf-ld", "ld"],
+ "OBJDUMP"     =>  ["arm-none-eabi-objdump", "arm-elf-objdump", "objdump"],
+ "OBJCOPY"     =>  ["arm-none-eabi-objcopy", "arm-elf-objcopy", "objcopy"],
+ "RANLIB"      =>  ["arm-none-eabi-ranlib", "arm-elf-ranlib", "ranlib"],
+ "QEMU"        =>  ["qemu-system-arm", "arm-softmmu", "qemu-system-arm"],
+ };
+
 $tools_arch{"x86"} =
 {
  "AR" 	      =>  ["i386-unknown-linux-gnu-ar.exe", "i386-elf-ar" , "ar"],
@@ -403,7 +415,7 @@ my %colors =
 
    my $nb_arch = 0;
 
-   for my $v ("x86", "ppc", "sparc")
+   for my $v ("arm", "x86", "ppc", "sparc")
    {
       
       if (check_arch_tools ($v) == 0)

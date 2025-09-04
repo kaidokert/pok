@@ -19,6 +19,7 @@
  */
 
 #include <errno.h>
+#include <libc.h>
 #include <core/time.h>
 #include "../nvic.h"
 

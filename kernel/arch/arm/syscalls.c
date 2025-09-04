@@ -27,11 +27,10 @@
 #include "mpu.h"
 
 /* Extract partition ID from current MPU configuration */
-static uint8_t get_current_partition_id(void) {
-  /* In this simple implementation, we track the current partition */
-  /* This could be enhanced to use MPU region information */
+static uint8_t pok_get_current_partition_id(void) {
+  /* TODO: Enhance to derive partition ID from current active MPU region */
   extern uint8_t pok_current_partition;
-  return pok_current_partition;
+  return (pok_current_partition);
 }
 
 /*
@@ -48,15 +47,20 @@ void SVC_Handler(void) {
   /* Get the stack frame from PSP */
   __asm volatile ("mrs %0, psp" : "=r" (frame));
   
+  if (frame == NULL) {
+    return; /* Invalid stack frame */
+  }
+  
   /* Extract SVC number from the SVC instruction */
   uint16_t *svc_addr = (uint16_t *)(frame[6] - 2); /* PC points to instruction after SVC */
   uint16_t svc_instruction = *svc_addr;             /* Read the 16-bit SVC instruction */
   uint8_t svc_number = svc_instruction & 0xFF;     /* SVC number is in lower 8 bits */
+  (void)svc_number;  /* Currently unused - could be used for SVC routing */
   
   /*
    * Set up syscall information
    */
-  syscall_info.partition = get_current_partition_id();
+  syscall_info.partition = pok_get_current_partition_id();
   
   if (syscall_info.partition >= POK_CONFIG_NB_PARTITIONS) {
     syscall_ret = POK_ERRNO_EINVAL;
