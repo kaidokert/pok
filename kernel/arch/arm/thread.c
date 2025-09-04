@@ -78,10 +78,12 @@ void pok_context_switch(uint32_t *old_sp, uint32_t new_sp) {
     "ldr r2, =0xE000ED04        \n"  /* SCB->ICSR */
     "ldr r3, =0x10000000        \n"  /* PENDSVSET bit */
     "str r3, [r2]               \n"  /* Trigger PendSV */
+    "dsb                        \n"  /* Data synchronization barrier */
+    "isb                        \n"  /* Instruction synchronization barrier */
     
-    : /* no output */
-    : "r" (old_sp), "r" (new_sp)
-    : "r2", "r3", "memory"
+    : "=m" (*old_sp)                 /* Output: old_sp is written to */
+    : "r" (new_sp), "m" (*old_sp)    /* Input: new_sp and old_sp memory */
+    : "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r11", "memory"
   );
 }
 

@@ -107,15 +107,20 @@ pok_ret_t pok_nvic_set_priority(uint8_t irq, uint8_t priority) {
       reg_offset = (irq - 4) * 8;
     } else if (irq >= 11 && irq <= 12) {
       shpr_reg = &SCB_SHPR2;
-      reg_offset = (irq - 8) * 8;
+      reg_offset = (irq - 11) * 8;  /* Fixed: was (irq - 8) */
     } else if (irq >= 14 && irq <= 15) {
       shpr_reg = &SCB_SHPR3;
-      reg_offset = (irq - 12) * 8;
+      reg_offset = (irq - 14) * 8;  /* Fixed: was (irq - 12) */
     } else {
       return (POK_ERRNO_EINVAL);
     }
     
-    uint32_t mask = ~(0xFF << reg_offset);
+    /* Ensure offset doesn't exceed register bounds (24 bits max) */
+    if (reg_offset > 24) {
+      return (POK_ERRNO_EINVAL);
+    }
+    
+    uint32_t mask = ~(0xFFu << reg_offset);
     *shpr_reg = (*shpr_reg & mask) | ((priority << 4) << reg_offset);
   } else {
     /* External interrupt priority */
@@ -153,34 +158,6 @@ pok_ret_t pok_nvic_set_vector_table(uint32_t offset) {
 
 /* Default exception handlers */
 void NMI_Handler(void) {
-  default_handler();
-}
-
-void HardFault_Handler(void) {
-#ifdef POK_NEEDS_DEBUG
-  printf("HardFault exception occurred\n");
-#endif
-  default_handler();
-}
-
-void MemManage_Handler(void) {
-#ifdef POK_NEEDS_DEBUG
-  printf("MemManage fault occurred\n");
-#endif
-  default_handler();
-}
-
-void BusFault_Handler(void) {
-#ifdef POK_NEEDS_DEBUG
-  printf("BusFault exception occurred\n");
-#endif
-  default_handler();
-}
-
-void UsageFault_Handler(void) {
-#ifdef POK_NEEDS_DEBUG
-  printf("UsageFault exception occurred\n");
-#endif
   default_handler();
 }
 
