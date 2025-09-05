@@ -224,20 +224,20 @@ pok_ret_t pok_nvic_set_priority(uint8_t irq, uint8_t priority) {
 
   if (irq < EXCEPTION_IRQ0) {
     /* System exception priority */
-    uint32_t *shpr_reg;
+    volatile uint32_t *shpr_reg;
     uint8_t reg_offset;
 
     if (irq >= 4 && irq <= 6) {
       /* MemManage (4), BusFault (5), UsageFault (6) */
-      shpr_reg = (uint32_t *)&SCB_SHPR1;
+      shpr_reg = (volatile uint32_t *)&SCB_SHPR1;
       reg_offset = (irq - 4) * 8;
     } else if (irq == 11) {
       /* SVCall (11) only */
-      shpr_reg = (uint32_t *)&SCB_SHPR2;
+      shpr_reg = (volatile uint32_t *)&SCB_SHPR2;
       reg_offset = 24; /* SVCall is at bits [31:24] of SHPR2 */
     } else if (irq == 12 || (irq >= 14 && irq <= 15)) {
       /* DebugMon (12), PendSV (14), SysTick (15) */
-      shpr_reg = (uint32_t *)&SCB_SHPR3;
+      shpr_reg = (volatile uint32_t *)&SCB_SHPR3;
       if (irq == 12) {
         reg_offset = 0; /* DebugMon is at bits [7:0] of SHPR3 */
       } else if (irq == 14) {

@@ -30,6 +30,9 @@
 #include "mpu.h"
 #include "nvic.h"
 
+/* Stack address calculation constants */
+#define POK_STACK_GUARD_BYTES 8 /* Guard offset for stack calculations */
+
 extern pok_ret_t pok_arch_space_init(void);
 
 pok_ret_t pok_arch_init() {
@@ -66,9 +69,8 @@ pok_ret_t pok_arch_preempt_disable() {
 }
 
 pok_ret_t pok_arch_preempt_enable() {
-  __asm volatile("dsb" : : : "memory");
-  __asm volatile("isb" : : : "memory");
   __asm volatile("cpsie i" : : : "memory");
+  __asm volatile("isb" : : : "memory");
   return POK_ERRNO_OK;
 }
 
@@ -84,9 +86,22 @@ pok_ret_t pok_arch_event_register(uint8_t vector, void (*handler)(void)) {
   return (pok_nvic_set_handler(vector, handler));
 }
 
+/**
+ * Calculate stack address for a thread in a partition
+ *
+ * @param partition_id Partition ID (must be < POK_CONFIG_NB_PARTITIONS)
+ * @param local_thread_id Local thread ID within partition
+ * @return Stack address or 0 on invalid input
+ */
 uint32_t pok_thread_stack_addr(const uint8_t partition_id,
                                const uint32_t local_thread_id) {
-  uint32_t stack_offset = local_thread_id * POK_USER_STACK_SIZE + 8;
+  /* Validate partition_id is within valid range */
+  if (partition_id >= POK_CONFIG_NB_PARTITIONS) {
+    return 0; /* Invalid partition ID */
+  }
+
+  uint32_t stack_offset =
+      local_thread_id * POK_USER_STACK_SIZE + POK_STACK_GUARD_BYTES;
   uint32_t partition_size = pok_partitions[partition_id].size;
 
   /* Add validation to ensure the computed address does not underflow */
