@@ -43,7 +43,7 @@ SECTIONS
   {
     *(.ARM.extab* .gnu.linkonce.armextab.*)
   } >FLASH
-  
+
   .ARM :
   {
     __exidx_start = .;
@@ -52,7 +52,7 @@ SECTIONS
   } >FLASH
 
   /* Initialized data (copied from flash to RAM at startup) */
-  .data : 
+  .data :
   {
     . = ALIGN(8);
     _sdata = .;
@@ -61,7 +61,7 @@ SECTIONS
     . = ALIGN(8);
     _edata = .;
   } >SRAM AT >FLASH
-  
+
   _sidata = LOADADDR(.data);
 
   /* Uninitialized data (zero-initialized) */
@@ -99,7 +99,7 @@ SECTIONS
   /* Heap (optional, after BSS) */
   _end = .;
   PROVIDE(end = .);
-  
+
   /* Remove specific debugging sections instead of entire libraries */
   /DISCARD/ :
   {

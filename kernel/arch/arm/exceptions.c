@@ -31,9 +31,9 @@
 #include "nvic.h"
 
 /* STM32F4 USART1 registers for non-blocking fault output */
-#define USART1_SR         (*((volatile uint32_t *)(0x40011000 + 0x00)))
-#define USART1_DR         (*((volatile uint32_t *)(0x40011000 + 0x04)))
-#define USART_SR_TXE      (1 << 7)  /* Transmit data register empty */
+#define USART1_SR (*((volatile uint32_t *)(0x40011000 + 0x00)))
+#define USART1_DR (*((volatile uint32_t *)(0x40011000 + 0x04)))
+#define USART_SR_TXE (1 << 7) /* Transmit data register empty */
 
 /* Non-blocking fault output functions */
 static inline void fault_putc(char c) {
@@ -47,7 +47,8 @@ static void fault_puts(const char *s) {
   while (*s) {
     fault_putc(*s++);
     /* Small delay to allow UART to catch up */
-    for (volatile int i = 0; i < 1000; i++);
+    for (volatile int i = 0; i < 1000; i++)
+      ;
   }
 }
 
@@ -62,17 +63,17 @@ static void fault_put_hex(uint32_t value) {
 static void fault_put_dec(uint32_t value) {
   char buf[10];
   int i = 0;
-  
+
   if (value == 0) {
     fault_putc('0');
     return;
   }
-  
+
   while (value > 0) {
     buf[i++] = '0' + (value % 10);
     value /= 10;
   }
-  
+
   /* Print digits in reverse order */
   while (i > 0) {
     fault_putc(buf[--i]);
@@ -94,17 +95,18 @@ static void HardFault_Handler_C(uint32_t *frame);
  * Macro to generate naked fault handler wrappers
  * Determines correct stack pointer (MSP vs PSP) based on EXC_RETURN
  */
-#define DEFINE_FAULT_HANDLER_WRAPPER(handler_name, c_handler_name) \
-void __attribute__((naked)) handler_name(void) { \
-  __asm volatile( \
-      "tst lr, #4                 \n" /* Test EXC_RETURN[2] */ \
-      "ite eq                     \n" /* If-Then-Else */ \
-      "mrseq r0, msp              \n" /* If EXC_RETURN[2]==0, use MSP */ \
-      "mrsne r0, psp              \n" /* If EXC_RETURN[2]==1, use PSP */ \
-      "b " #c_handler_name "      \n" /* Call C handler with correct frame */ \
-      :: \
-          : "r0", "memory"); \
-}
+#define DEFINE_FAULT_HANDLER_WRAPPER(handler_name, c_handler_name)             \
+  void __attribute__((naked)) handler_name(void) {                             \
+    __asm volatile(                                                            \
+        "tst lr, #4                 \n" /* Test EXC_RETURN[2] */               \
+        "ite eq                     \n" /* If-Then-Else */                     \
+        "mrseq r0, msp              \n" /* If EXC_RETURN[2]==0, use MSP */     \
+        "mrsne r0, psp              \n" /* If EXC_RETURN[2]==1, use PSP */     \
+        "b " #c_handler_name                                                   \
+        "      \n" /* Call C handler with correct frame */                     \
+        ::                                                                     \
+            : "r0", "memory");                                                 \
+  }
 
 DEFINE_FAULT_HANDLER_WRAPPER(MemManage_Handler, MemManage_Handler_C)
 
@@ -162,15 +164,19 @@ static void MemManage_Handler_C(uint32_t *frame) {
 
   /* Handle partition isolation violation */
   if (partition_id < POK_CONFIG_NB_PARTITIONS) {
-    /* Terminate the offending partition and, on success, reschedule globally and return */
-    if (pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED) == POK_ERRNO_OK) {
+    /* Terminate the offending partition and, on success, reschedule globally
+     * and return */
+    if (pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED) ==
+        POK_ERRNO_OK) {
       pok_global_sched();
       return;
     }
   }
 
   /* Could not recover: halt the system */
-  while (1) { __asm volatile("wfi"); }
+  while (1) {
+    __asm volatile("wfi");
+  }
 }
 
 DEFINE_FAULT_HANDLER_WRAPPER(BusFault_Handler, BusFault_Handler_C)
@@ -226,12 +232,15 @@ static void BusFault_Handler_C(uint32_t *frame) {
 #endif
 
   if (partition_id < POK_CONFIG_NB_PARTITIONS) {
-    if (pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED) == POK_ERRNO_OK) {
+    if (pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED) ==
+        POK_ERRNO_OK) {
       pok_global_sched();
       return;
     }
   }
-  while (1) { __asm volatile("wfi"); }
+  while (1) {
+    __asm volatile("wfi");
+  }
 }
 
 DEFINE_FAULT_HANDLER_WRAPPER(UsageFault_Handler, UsageFault_Handler_C)
@@ -268,12 +277,15 @@ static void UsageFault_Handler_C(uint32_t *frame) {
 #endif
 
   if (partition_id < POK_CONFIG_NB_PARTITIONS) {
-    if (pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED) == POK_ERRNO_OK) {
+    if (pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED) ==
+        POK_ERRNO_OK) {
       pok_global_sched();
       return;
     }
   }
-  while (1) { __asm volatile("wfi"); }
+  while (1) {
+    __asm volatile("wfi");
+  }
 }
 
 /*
@@ -321,11 +333,14 @@ static void HardFault_Handler_C(uint32_t *frame) {
 
   /* Try to recover by stopping the current partition */
   if (partition_id < POK_CONFIG_NB_PARTITIONS) {
-    if (pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED) == POK_ERRNO_OK) {
+    if (pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED) ==
+        POK_ERRNO_OK) {
       pok_global_sched();
       return;
     }
   }
   /* If recovery fails, halt the system */
-  while (1) { __asm volatile("wfi"); }
+  while (1) {
+    __asm volatile("wfi");
+  }
 }

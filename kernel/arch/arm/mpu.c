@@ -91,7 +91,8 @@ pok_ret_t pok_mpu_configure_region(uint8_t region, uint32_t base_addr,
   /* Validate size using helper macro */
   if (!MPU_IS_VALID_SIZE(size)) {
 #ifdef POK_NEEDS_DEBUG
-    printf("ERROR: MPU region size %u is not power-of-2 or below minimum\n", size);
+    printf("ERROR: MPU region size %u is not power-of-2 or below minimum\n",
+           size);
 #endif
     return POK_ERRNO_EINVAL;
   }
@@ -138,8 +139,10 @@ pok_ret_t pok_mpu_configure_region(uint8_t region, uint32_t base_addr,
  * @param attributes Access permissions and memory attributes
  * @return POK_ERRNO_OK on success, error code on failure
  */
-pok_ret_t pok_mpu_configure_region_with_subregions(uint8_t region, uint32_t base_addr,
-                                                   uint32_t actual_size, uint32_t aligned_size,
+pok_ret_t pok_mpu_configure_region_with_subregions(uint8_t region,
+                                                   uint32_t base_addr,
+                                                   uint32_t actual_size,
+                                                   uint32_t aligned_size,
                                                    uint32_t attributes) {
   uint32_t rasr;
   uint8_t subregion_disable = 0;
@@ -154,18 +157,22 @@ pok_ret_t pok_mpu_configure_region_with_subregions(uint8_t region, uint32_t base
   }
 
   /* Calculate subregion disable bits to mask unused memory */
-  if (aligned_size >= ARM_MPU_MIN_SUBREGION_SIZE) { /* Minimum size for subregions */
-    uint32_t subregion_size = aligned_size / ARM_MPU_SUBREGION_COUNT; /* MPU subregions */
-    uint32_t used_subregions = (actual_size + subregion_size - 1) / subregion_size;
-    
+  if (aligned_size >=
+      ARM_MPU_MIN_SUBREGION_SIZE) { /* Minimum size for subregions */
+    uint32_t subregion_size =
+        aligned_size / ARM_MPU_SUBREGION_COUNT; /* MPU subregions */
+    uint32_t used_subregions =
+        (actual_size + subregion_size - 1) / subregion_size;
+
     /* Disable unused subregions (set corresponding bits) */
     for (uint8_t i = used_subregions; i < ARM_MPU_SUBREGION_COUNT; i++) {
       subregion_disable |= (1 << i);
     }
-    
+
 #ifdef POK_NEEDS_DEBUG
     if (subregion_disable != 0) {
-      uint32_t exposed_memory = aligned_size - (used_subregions * subregion_size);
+      uint32_t exposed_memory =
+          aligned_size - (used_subregions * subregion_size);
       printf("MPU region %d: using subregions to hide %u bytes (mask=0x%02x)\n",
              region, exposed_memory, subregion_disable);
     }
@@ -183,8 +190,8 @@ pok_ret_t pok_mpu_configure_region_with_subregions(uint8_t region, uint32_t base
   if (size_field == 0) {
     return POK_ERRNO_EINVAL;
   }
-  rasr = size_field | attributes | 
-         (subregion_disable << MPU_RASR_SRD_SHIFT) | MPU_RASR_ENABLE;
+  rasr = size_field | attributes | (subregion_disable << MPU_RASR_SRD_SHIFT) |
+         MPU_RASR_ENABLE;
   MPU_RASR = rasr;
 
   /* Store configuration */
@@ -222,24 +229,24 @@ pok_ret_t pok_mpu_disable_region(uint8_t region) {
   }
 
   MPU_RNR = region;
-pok_ret_t pok_mpu_disable_region(uint8_t region) {
-  if (region >= mpu_region_count) {
-    return POK_ERRNO_EINVAL;
+  pok_ret_t pok_mpu_disable_region(uint8_t region) {
+    if (region >= mpu_region_count) {
+      return POK_ERRNO_EINVAL;
+    }
+
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+
+    MPU_RNR = region;
+    MPU_RASR &= ~MPU_RASR_ENABLE;
+    mpu_regions[region].enabled = 0;
+
+    __asm volatile("dsb" : : : "memory");
+
+    __set_PRIMASK(primask);
+
+    return POK_ERRNO_OK;
   }
-
-  uint32_t primask = __get_PRIMASK();
-  __disable_irq();
-
-  MPU_RNR = region;
-  MPU_RASR &= ~MPU_RASR_ENABLE;
-  mpu_regions[region].enabled = 0;
-
-  __asm volatile("dsb" : : : "memory");
-
-  __set_PRIMASK(primask);
-
-  return POK_ERRNO_OK;
-}
 
   __asm volatile("dsb" : : : "memory");
 
@@ -286,21 +293,22 @@ uint32_t pok_mpu_size_to_rasr(uint32_t size) {
 }
 
 uint8_t pok_mpu_get_active_user_region(void) {
-  /* Iterate through user regions (1 to POK_CONFIG_NB_PARTITIONS) to find active one */
+  /* Iterate through user regions (1 to POK_CONFIG_NB_PARTITIONS) to find active
+   * one */
   for (uint8_t region = 1; region <= POK_CONFIG_NB_PARTITIONS; region++) {
     if (region >= mpu_region_count) {
       break;
     }
-    
+
     /* Select region to read its configuration */
     MPU_RNR = region;
-    
+
     /* Check if region is enabled */
     if (MPU_RASR & MPU_RASR_ENABLE) {
       return region;
     }
   }
-  
+
   return 0; /* No active user region found, return kernel region */
 }
 
@@ -308,10 +316,10 @@ uint32_t pok_mpu_get_region_base(uint8_t region) {
   if (region >= mpu_region_count) {
     return 0;
   }
-  
+
   /* Select region to read its configuration */
   MPU_RNR = region;
-  
+
   /* Return base address (mask out region number and valid bit) */
   return (MPU_RBAR & ~(MPU_RBAR_REGION_MASK | MPU_RBAR_VALID));
 }

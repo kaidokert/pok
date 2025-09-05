@@ -35,7 +35,8 @@ extern vector_table_entry_t vector_table[]; /* Original ROM vector table */
 #define NVIC_VECTOR_COUNT CORTEX_M_NVIC_VECTOR_COUNT
 #define NVIC_VECTOR_TABLE_SIZE CORTEX_M_NVIC_VECTOR_TABLE_SIZE
 #define NVIC_VECTOR_TABLE_ALIGNMENT CORTEX_M_NVIC_VECTOR_TABLE_ALIGNMENT
-static vector_table_entry_t ram_vector_table[NVIC_VECTOR_COUNT] __attribute__((aligned(NVIC_VECTOR_TABLE_ALIGNMENT)));
+static vector_table_entry_t ram_vector_table[NVIC_VECTOR_COUNT]
+    __attribute__((aligned(NVIC_VECTOR_TABLE_ALIGNMENT)));
 static uint8_t vector_table_relocated = 0;
 
 /* Default handlers */
@@ -53,27 +54,28 @@ static pok_ret_t pok_nvic_relocate_vector_table(void) {
   if (vector_table_relocated) {
     return POK_ERRNO_OK; /* Already relocated */
   }
-  
+
   /* Copy ROM vector table to RAM */
   for (int i = 0; i < NVIC_VECTOR_COUNT; i++) {
     ram_vector_table[i] = vector_table[i];
   }
-  
+
   /* Update VTOR register to point to RAM vector table */
   uint32_t ram_table_addr = (uint32_t)ram_vector_table;
-  
+
   /* Validate alignment (must be next power of 2 of table size) */
   if (ram_table_addr & (NVIC_VECTOR_TABLE_ALIGNMENT - 1)) {
 #ifdef POK_NEEDS_DEBUG
-    printf("ERROR: RAM vector table not properly aligned: 0x%x (required: %d bytes)\n", 
+    printf("ERROR: RAM vector table not properly aligned: 0x%x (required: %d "
+           "bytes)\n",
            ram_table_addr, NVIC_VECTOR_TABLE_ALIGNMENT);
 #endif
     return POK_ERRNO_EFAULT;
   }
-  
+
   SCB_VTOR = ram_table_addr;
   vector_table_relocated = 1;
-  
+
 #ifdef POK_NEEDS_DEBUG
   printf("Vector table relocated to RAM at 0x%x\n", ram_table_addr);
 #endif
@@ -86,16 +88,16 @@ static pok_ret_t pok_nvic_relocate_vector_table(void) {
 
 pok_ret_t pok_nvic_init(void) {
   pok_ret_t ret;
-  
+
   /* Relocate vector table to RAM for runtime handler updates */
   ret = pok_nvic_relocate_vector_table();
   if (ret != POK_ERRNO_OK) {
     return (ret);
   }
-  
+
   /* Enable division-by-zero trap to trigger UsageFault */
   SCB_CCR |= SCB_CCR_DIV_0_TRP;
-  
+
   /* Enable memory management, bus fault, and usage fault exceptions */
   SCB_SHCSR |=
       SCB_SHCSR_MEMFAULTENA | SCB_SHCSR_BUSFAULTENA | SCB_SHCSR_USGFAULTENA;
@@ -104,7 +106,7 @@ pok_ret_t pok_nvic_init(void) {
   pok_nvic_set_priority(EXCEPTION_MEMMANAGE, NVIC_PRIORITY_HIGH);
   pok_nvic_set_priority(EXCEPTION_BUSFAULT, NVIC_PRIORITY_HIGH);
   pok_nvic_set_priority(EXCEPTION_USAGEFAULT, NVIC_PRIORITY_HIGH);
-  
+
   /* Set PendSV and SysTick to lowest priority for context switching */
   pok_nvic_set_priority(EXCEPTION_PENDSV, NVIC_PRIORITY_LOWEST);
   pok_nvic_set_priority(EXCEPTION_SYSTICK, NVIC_PRIORITY_LOWEST);
@@ -142,17 +144,17 @@ pok_ret_t pok_nvic_set_handler(uint8_t irq, void (*handler)(void)) {
       NVIC_ICER[reg_idx] = (1 << bit_pos); /* Disable IRQ */
     }
   }
-  
+
   /* Set handler in RAM vector table */
   if (handler == NULL) {
     ram_vector_table[irq] = pok_nvic_default_handler;
   } else {
     ram_vector_table[irq] = handler;
   }
-  
+
   /* Data Synchronization Barrier to ensure vector table update completes */
   __asm volatile("dsb" : : : "memory");
- __asm volatile("isb");
+  __asm volatile("isb");
   /* Re-enable IRQ if it was enabled before */
   if (irq_was_enabled) {
     uint8_t external_irq = irq - EXCEPTION_IRQ0;
@@ -174,7 +176,7 @@ pok_ret_t pok_nvic_enable_irq(uint8_t irq) {
   uint32_t bit_pos = external_irq % 32;
 
   NVIC_ISER[reg_idx] = (1 << bit_pos);
-  
+
   /* Data Synchronization Barrier to ensure register write completes */
   __asm volatile("dsb" : : : "memory");
 
@@ -191,7 +193,7 @@ pok_ret_t pok_nvic_disable_irq(uint8_t irq) {
   uint32_t bit_pos = external_irq % 32;
 
   NVIC_ICER[reg_idx] = (1 << bit_pos);
-  
+
   /* Data Synchronization Barrier to ensure register write completes */
   __asm volatile("dsb" : : : "memory");
 
@@ -223,7 +225,7 @@ pok_ret_t pok_nvic_set_priority(uint8_t irq, uint8_t priority) {
         reg_offset = 0; /* DebugMon is at bits [7:0] of SHPR3 */
       } else if (irq == 14) {
         reg_offset = 16; /* PendSV is at bits [23:16] of SHPR3 */
-      } else { /* irq == 15 */
+      } else {           /* irq == 15 */
         reg_offset = 24; /* SysTick is at bits [31:24] of SHPR3 */
       }
     } else {
@@ -242,7 +244,7 @@ pok_ret_t pok_nvic_set_priority(uint8_t irq, uint8_t priority) {
     uint8_t external_irq = irq - EXCEPTION_IRQ0;
     NVIC_IPR[external_irq] = priority << 4;
   }
-  
+
   /* Data Synchronization Barrier to ensure priority register write completes */
   __asm volatile("dsb" : : : "memory");
 

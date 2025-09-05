@@ -61,7 +61,7 @@ uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
   /* Initialize context for thread startup */
   sp->ctx.pc = (uint32_t)pok_arch_thread_start; /* Start with thread wrapper */
   sp->ctx.lr = ARM_EXC_RETURN_THREAD_PSP; /* Return to Thread mode, use PSP */
-  sp->ctx.xpsr = 0x01000000; /* Thumb bit set */
+  sp->ctx.xpsr = 0x01000000;              /* Thumb bit set */
   /* Ensure 8-byte aligned stack pointer */
   sp->ctx.sp = ((uint32_t)stack_addr + stack_size - STACK_ALIGNMENT) &
                ~STACK_ALIGNMENT_MASK;
@@ -73,7 +73,7 @@ uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
 }
 
 /* Global variables for PendSV context switching - accessed by PendSV handler */
-uint32_t * volatile g_old_sp_ptr = NULL;
+uint32_t *volatile g_old_sp_ptr = NULL;
 volatile uint32_t g_new_sp = 0;
 /**
  * Perform ARM Cortex-M context switch between threads
@@ -122,7 +122,8 @@ void pok_context_reset(uint32_t stack_size, uint32_t stack_addr) {
   sp->ctx.lr = ARM_EXC_RETURN_THREAD_PSP;
   sp->ctx.xpsr = 0x01000000;
   /* Ensure 8-byte aligned stack pointer */
-  sp->ctx.sp = ((stack_addr + stack_size - STACK_ALIGNMENT) & ~STACK_ALIGNMENT_MASK);
+  sp->ctx.sp =
+      ((stack_addr + stack_size - STACK_ALIGNMENT) & ~STACK_ALIGNMENT_MASK);
 
   sp->entry = entry;
   sp->id = id;

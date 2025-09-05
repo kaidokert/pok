@@ -15,8 +15,8 @@
 #ifndef __POK_ARM_MPU_UTILS_H__
 #define __POK_ARM_MPU_UTILS_H__
 
-#include <types.h>
 #include "cortex_m_config.h"
+#include <types.h>
 
 /**
  * \file    arch/arm/mpu_utils.h
@@ -36,7 +36,7 @@ static inline uint32_t mpu_align_size_to_power_of_2(uint32_t size) {
   if (size <= MPU_MIN_REGION_SIZE) {
     return MPU_MIN_REGION_SIZE;
   }
-  
+
   /* Find next power of 2 using bit manipulation */
   uint32_t aligned_size = 1;
   while (aligned_size < size) {

@@ -14,7 +14,7 @@
 
 /**
  * \file    arch/arm/stm32f4/startup.S
- * \author  POK team  
+ * \author  POK team
  * \brief   STM32F4 startup code and vector table
  */
 
@@ -50,7 +50,7 @@ vector_table:
     .word   0                           /* Reserved */
     .word   PendSV_Handler              /* PendSV Handler */
     .word   SysTick_Handler             /* SysTick Handler */
-    
+
     /* External interrupts (STM32F4 specific) */
     .rept   82
     .word   Default_Handler             /* External interrupt handlers */
@@ -67,21 +67,21 @@ Reset_Handler:
     /* Set stack pointer */
     ldr r0, =__StackTop
     mov sp, r0
-    
+
     /* Initialize data section */
     ldr r0, =_sdata
     ldr r1, =_edata
     ldr r2, =_sidata
     bl  copy_data
-    
+
     /* Initialize BSS section */
     ldr r0, =_sbss
     ldr r1, =_ebss
     bl  clear_bss
-    
+
     /* Call main POK kernel initialization */
     bl  pok_boot
-    
+
     /* Should never reach here */
 hang:
     b   hang
@@ -123,7 +123,7 @@ Default_Handler:
 .weak NMI_Handler
 .thumb_set NMI_Handler, Default_Handler
 
-.weak HardFault_Handler  
+.weak HardFault_Handler
 .thumb_set HardFault_Handler, Default_Handler
 
 .weak MemManage_Handler

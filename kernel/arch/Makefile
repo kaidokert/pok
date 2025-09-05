@@ -11,7 +11,7 @@ endif
 
 LO_TARGET=	arch.lo
 
-LO_OBJS=		
+LO_OBJS=
 
 LO_DEPS=	$(ARCH)/$(ARCH).lo
 

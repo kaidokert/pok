@@ -17,30 +17,31 @@
  * \brief Simple ARM Cortex-M hello world example
  */
 
-#include <libc/stdio.h>
+#include <core/partition.h>
 #include <core/thread.h>
 #include <core/time.h>
-#include <core/partition.h>
+#include <libc/stdio.h>
 
 void thread1_job(void) {
   int i = 0;
-  
+
   while (1) {
     printf("Hello from ARM Cortex-M thread 1, iteration %d\n", i++);
-    pok_thread_sleep(1000000);  /* Sleep for 1 second */
+    pok_thread_sleep(1000000); /* Sleep for 1 second */
   }
 }
 
 void thread2_job(void) {
   int i = 0;
-  
+
   while (1) {
     printf("Hello from ARM Cortex-M thread 2, iteration %d\n", i++);
-    pok_thread_sleep(1500000);  /* Sleep for 1.5 seconds */
+    pok_thread_sleep(1500000); /* Sleep for 1.5 seconds */
   }
 }
 
-static inline void setup_thread_attributes(pok_thread_attr_t *attr, void *entry) {
+static inline void setup_thread_attributes(pok_thread_attr_t *attr,
+                                           void *entry) {
   attr->entry = entry;
   attr->priority = 1;
   attr->stack_size = 1024;
@@ -55,34 +56,34 @@ int main(void) {
   pok_ret_t ret;
   uint32_t tid1, tid2;
   pok_thread_attr_t attr1 = {0}, attr2 = {0};
-  
+
   printf("POK ARM Cortex-M Hello World Example\n");
   printf("====================================\n");
-  
+
   /* Setup first thread attributes */
   setup_thread_attributes(&attr1, (void *)thread1_job);
-  
+
   /* Create first thread */
   ret = pok_thread_create(&tid1, &attr1);
   if (ret != POK_ERRNO_OK) {
     printf("Error creating thread 1: %d\n", ret);
     return -1;
   }
-  
+
   /* Setup second thread attributes */
   setup_thread_attributes(&attr2, (void *)thread2_job);
-  
+
   /* Create second thread */
   ret = pok_thread_create(&tid2, &attr2);
   if (ret != POK_ERRNO_OK) {
     printf("Error creating thread 2: %d\n", ret);
     return -1;
   }
-  
+
   printf("Threads created successfully. Starting scheduler...\n");
-  
+
   /* Start the threads */
   pok_partition_set_mode(POK_PARTITION_MODE_NORMAL);
-  
+
   return 0;
 }

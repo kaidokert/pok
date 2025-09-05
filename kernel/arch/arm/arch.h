@@ -22,39 +22,42 @@
 #define __POK_ARM_ARCH_H__
 
 /* ARM Cortex-M Exception Return Values */
-#define ARM_EXC_RETURN_THREAD_PSP    0xFFFFFFFD  /* Return to Thread mode, use PSP */
-#define ARM_EXC_RETURN_HANDLER_MSP   0xFFFFFFF1  /* Return to Handler mode, use MSP */
-#define ARM_EXC_RETURN_THREAD_MSP    0xFFFFFFF9  /* Return to Thread mode, use MSP */
+#define ARM_EXC_RETURN_THREAD_PSP                                              \
+  0xFFFFFFFDUL /* Return to Thread mode, use PSP */
+#define ARM_EXC_RETURN_HANDLER_MSP                                             \
+  0xFFFFFFF1UL /* Return to Handler mode, use MSP */
+#define ARM_EXC_RETURN_THREAD_MSP                                              \
+  0xFFFFFFF9UL /* Return to Thread mode, use MSP */
 
 /* ARM Cortex-M Register Bit Masks */
-#define ARM_REGISTER_BYTE_MASK       0xFF        /* 8-bit register mask */
-#define ARM_REGISTER_WORD_MASK       0xFFFF      /* 16-bit register mask */  
-#define ARM_REGISTER_DWORD_MASK      0xFFFFFFFF  /* 32-bit register mask */
+#define ARM_REGISTER_BYTE_MASK 0xFFu        /* 8-bit register mask */
+#define ARM_REGISTER_WORD_MASK 0xFFFFu      /* 16-bit register mask */
+#define ARM_REGISTER_DWORD_MASK 0xFFFFFFFFu /* 32-bit register mask */
 
 /* Fault Status Register Masks */
-#define ARM_CFSR_MMFSR_MASK          0xFF        /* MemManage Fault Status [7:0] */
-#define ARM_CFSR_BFSR_MASK           0xFF00      /* Bus Fault Status [15:8] */
-#define ARM_CFSR_UFSR_MASK           0xFFFF0000  /* Usage Fault Status [31:16] */
+#define ARM_CFSR_MMFSR_MASK 0xFFu      /* MemManage Fault Status [7:0] */
+#define ARM_CFSR_BFSR_MASK 0xFF00u     /* Bus Fault Status [15:8] */
+#define ARM_CFSR_UFSR_MASK 0xFFFF0000u /* Usage Fault Status [31:16] */
 
 /* MPU Region Size Constants */
-#define ARM_MPU_MIN_SUBREGION_SIZE   256         /* Minimum size for subregions */
-#define ARM_MPU_SUBREGION_COUNT      8           /* Number of subregions per region */
+#define ARM_MPU_MIN_SUBREGION_SIZE 256 /* Minimum size for subregions */
+#define ARM_MPU_SUBREGION_COUNT 8      /* Number of subregions per region */
 
 /* SVC Instruction Encoding */
-#define ARM_SVC_NUMBER_MASK          0xFF        /* SVC number in lower 8 bits */
+#define ARM_SVC_NUMBER_MASK 0xFF /* SVC number in lower 8 bits */
 
 /* Priority Register Masks */
 #ifndef ARM_PRIORITY_BITS
-  #ifdef __NVIC_PRIO_BITS
-    #define ARM_PRIORITY_BITS __NVIC_PRIO_BITS
-  #else
-    #define ARM_PRIORITY_BITS 4 /* BSP default; override per SoC */
-  #endif
+#ifdef __NVIC_PRIO_BITS
+#define ARM_PRIORITY_BITS __NVIC_PRIO_BITS
+#else
+#define ARM_PRIORITY_BITS 4 /* BSP default; override per SoC */
+#endif
 #endif
 #define ARM_PRIORITY_MASK ((uint8_t)(0xFFu << (8 - ARM_PRIORITY_BITS)))
 
 /* Common Magic Values - for reference only, use descriptive names */
-#define ARM_MAGIC_DEAD               0xDEAD      /* Debug marker value */
-#define ARM_MAGIC_BEEF               0xBEEF      /* Debug marker value */
+#define ARM_MAGIC_DEAD 0xDEADu /* Debug marker value */
+#define ARM_MAGIC_BEEF 0xBEEFu /* Debug marker value */
 
 #endif /* __POK_ARM_ARCH_H__ */

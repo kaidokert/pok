@@ -35,24 +35,24 @@
 static uint8_t pok_get_current_partition_id(void) {
   /* Get active user MPU region */
   uint8_t active_region = pok_mpu_get_active_user_region();
-  
+
   /* Region 0 is kernel, user regions start at 1 */
   if (active_region == 0) {
     /* Running in kernel mode */
     extern uint8_t pok_current_partition;
     return (pok_current_partition);
   }
-  
+
   /* Convert region ID back to partition ID (partition_id = region_id - 1) */
   uint8_t partition_id = active_region - 1;
-  
+
   /* Validate derived partition ID */
   if (partition_id >= POK_CONFIG_NB_PARTITIONS) {
     /* Fallback to global variable if derived ID is invalid */
     extern uint8_t pok_current_partition;
     return (pok_current_partition);
   }
-  
+
   return (partition_id);
 }
 
@@ -99,9 +99,8 @@ void SVC_Handler(void) {
    * Get syscall arguments from registers
    * r0 = syscall_id, r1 = syscall_args pointer
    */
-  syscall_id = (pok_syscall_id_t)frame[0]; /* r0 */
-  syscall_args =
-      (pok_syscall_args_t *)(frame[1]); /* r1 */
+  syscall_id = (pok_syscall_id_t)frame[0];         /* r0 */
+  syscall_args = (pok_syscall_args_t *)(frame[1]); /* r1 */
   /*
    * Validate that the arguments pointer is within partition bounds
    */

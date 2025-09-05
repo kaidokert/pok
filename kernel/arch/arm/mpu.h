@@ -15,9 +15,9 @@
 #ifndef __POK_ARM_MPU_H__
 #define __POK_ARM_MPU_H__
 
+#include "cortex_m_config.h"
 #include <errno.h>
 #include <types.h>
-#include "cortex_m_config.h"
 
 /* ARM Cortex-M MPU Register Base */
 #define MPU_BASE 0xE000ED90
@@ -70,31 +70,42 @@
 #define MPU_TEX(x) ((x) << MPU_RASR_TEX_SHIFT)
 
 /* Common Memory Type Combinations (TEX[2:0], C, B) */
-#define MPU_ATTR_FLASH_ROM        (MPU_TEX(0) | MPU_RASR_C)           /* TEX=000, C=1, B=0 - Normal, Non-cacheable */
-#define MPU_ATTR_INTERNAL_SRAM    (MPU_TEX(0) | MPU_RASR_C | MPU_RASR_B) /* TEX=000, C=1, B=1 - Normal, Write-back cacheable */  
-#define MPU_ATTR_EXTERNAL_RAM     (MPU_TEX(1) | MPU_RASR_C | MPU_RASR_B) /* TEX=001, C=1, B=1 - Normal, Write-back cacheable */
-#define MPU_ATTR_PERIPHERAL       (MPU_TEX(0))                        /* TEX=000, C=0, B=0 - Strongly-ordered */
-#define MPU_ATTR_PERIPHERAL_XN    (MPU_TEX(0) | MPU_RASR_XN)          /* Strongly-ordered + Execute Never */
+#define MPU_ATTR_FLASH_ROM                                                     \
+  (MPU_TEX(0) | MPU_RASR_C) /* TEX=000, C=1, B=0 - Normal, Non-cacheable */
+#define MPU_ATTR_INTERNAL_SRAM                                                 \
+  (MPU_TEX(0) | MPU_RASR_C |                                                   \
+   MPU_RASR_B) /* TEX=000, C=1, B=1 - Normal, Write-back cacheable */
+#define MPU_ATTR_EXTERNAL_RAM                                                  \
+  (MPU_TEX(1) | MPU_RASR_C |                                                   \
+   MPU_RASR_B) /* TEX=001, C=1, B=1 - Normal, Write-back cacheable */
+#define MPU_ATTR_PERIPHERAL                                                    \
+  (MPU_TEX(0)) /* TEX=000, C=0, B=0 - Strongly-ordered */
+#define MPU_ATTR_PERIPHERAL_XN                                                 \
+  (MPU_TEX(0) | MPU_RASR_XN) /* Strongly-ordered + Execute Never */
 
 /* Access Permission Helper Macros */
-#define MPU_PERM_NO_ACCESS()      MPU_AP_NO_ACCESS
-#define MPU_PERM_PRIV_RW()        MPU_AP_PRIV_RW  
-#define MPU_PERM_USER_RO()        MPU_AP_PRIV_RW_USER_RO
-#define MPU_PERM_ALL_RW()         MPU_AP_ALL_RW
-#define MPU_PERM_PRIV_RO()        MPU_AP_PRIV_RO
-#define MPU_PERM_ALL_RO()         MPU_AP_ALL_RO
+#define MPU_PERM_NO_ACCESS() MPU_AP_NO_ACCESS
+#define MPU_PERM_PRIV_RW() MPU_AP_PRIV_RW
+#define MPU_PERM_USER_RO() MPU_AP_PRIV_RW_USER_RO
+#define MPU_PERM_ALL_RW() MPU_AP_ALL_RW
+#define MPU_PERM_PRIV_RO() MPU_AP_PRIV_RO
+#define MPU_PERM_ALL_RO() MPU_AP_ALL_RO
 
 /* Combined Configuration Macros for Common Use Cases */
-#define MPU_CONFIG_FLASH_CODE     (MPU_ATTR_FLASH_ROM | MPU_PERM_ALL_RO())
-#define MPU_CONFIG_SRAM_DATA      (MPU_ATTR_INTERNAL_SRAM | MPU_PERM_ALL_RW() | MPU_RASR_XN)
-#define MPU_CONFIG_PERIPHERAL_RW  (MPU_ATTR_PERIPHERAL_XN | MPU_PERM_PRIV_RW())
-#define MPU_CONFIG_USER_STACK     (MPU_ATTR_INTERNAL_SRAM | MPU_PERM_USER_RO() | MPU_RASR_XN)
-#define MPU_CONFIG_KERNEL_DATA    (MPU_ATTR_INTERNAL_SRAM | MPU_PERM_PRIV_RW() | MPU_RASR_XN)
+#define MPU_CONFIG_FLASH_CODE (MPU_ATTR_FLASH_ROM | MPU_PERM_ALL_RO())
+#define MPU_CONFIG_SRAM_DATA                                                   \
+  (MPU_ATTR_INTERNAL_SRAM | MPU_PERM_ALL_RW() | MPU_RASR_XN)
+#define MPU_CONFIG_PERIPHERAL_RW (MPU_ATTR_PERIPHERAL_XN | MPU_PERM_PRIV_RW())
+#define MPU_CONFIG_USER_STACK                                                  \
+  (MPU_ATTR_INTERNAL_SRAM | MPU_PERM_USER_RO() | MPU_RASR_XN)
+#define MPU_CONFIG_KERNEL_DATA                                                 \
+  (MPU_ATTR_INTERNAL_SRAM | MPU_PERM_PRIV_RW() | MPU_RASR_XN)
 
 /* MPU Size and Validation Helper Macros */
-#define MPU_MIN_REGION_SIZE       32              /* Minimum MPU region size */
-#define MPU_IS_POWER_OF_2(x)      (((x) != 0) && (((x) & ((x) - 1)) == 0))
-#define MPU_IS_VALID_SIZE(x)      ((x) >= MPU_MIN_REGION_SIZE && MPU_IS_POWER_OF_2(x))
+#define MPU_MIN_REGION_SIZE 32 /* Minimum MPU region size */
+#define MPU_IS_POWER_OF_2(x) (((x) != 0) && (((x) & ((x) - 1)) == 0))
+#define MPU_IS_VALID_SIZE(x)                                                   \
+  ((x) >= MPU_MIN_REGION_SIZE && MPU_IS_POWER_OF_2(x))
 #define MPU_IS_ALIGNED(addr, size) (((addr) & ((size) - 1)) == 0)
 
 /* Maximum number of MPU regions */
@@ -113,8 +124,10 @@ typedef struct {
 pok_ret_t pok_mpu_init(void);
 pok_ret_t pok_mpu_configure_region(uint8_t region, uint32_t base_addr,
                                    uint32_t size, uint32_t attributes);
-pok_ret_t pok_mpu_configure_region_with_subregions(uint8_t region, uint32_t base_addr,
-                                                   uint32_t actual_size, uint32_t aligned_size,
+pok_ret_t pok_mpu_configure_region_with_subregions(uint8_t region,
+                                                   uint32_t base_addr,
+                                                   uint32_t actual_size,
+                                                   uint32_t aligned_size,
                                                    uint32_t attributes);
 pok_ret_t pok_mpu_enable_region(uint8_t region);
 pok_ret_t pok_mpu_disable_region(uint8_t region);

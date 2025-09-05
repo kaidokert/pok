@@ -164,7 +164,7 @@ my %colors =
       chomp ($line);
 
       ($version) =($line =~ /^[a-zA-Z]+\s([\.0-9a-zA-Z]+)\s.*$/);
-     
+
       if ( "$version" ne "$OCARINA_VERSION")
       {
          print $colors{"RED"}."WARNING: POK required Ocarina version $OCARINA_VERSION, incorrect version \n".$colors{"STD"};
@@ -359,13 +359,13 @@ my %colors =
 
 	sub check_libxml
 	{
-		my $ret = system ("perl -e 'use XML::LibXML;' >/dev/null 2>&1");  
+		my $ret = system ("perl -e 'use XML::LibXML;' >/dev/null 2>&1");
 		if ($ret != 0)
 		{
 			printf "XML::LibXML (Perl XML/LibXML library) not installed, please install it\n";
 			exit 1;
 		}
-			
+
 	}
 
 
@@ -394,19 +394,19 @@ my %colors =
 
    if ($use_floppy == 1)
    {
-      $tools_arch{"x86"}{"MCOPY"} = [ "mcopy"]; 
-      $tools_arch{"x86"}{"MMD"} = [ "mmd"]; 
+      $tools_arch{"x86"}{"MCOPY"} = [ "mcopy"];
+      $tools_arch{"x86"}{"MMD"} = [ "mmd"];
    }
 
    if ($use_xcov == 1)
    {
-      $tools_common{"XCOV"} = [ "xcov"]; 
+      $tools_common{"XCOV"} = [ "xcov"];
    }
 
 
    if ($use_spoq == 1)
    {
-      $tools_arch{"x86"}{"QEMU"} = [ "qemu-spoqed"]; 
+      $tools_arch{"x86"}{"QEMU"} = [ "qemu-spoqed"];
    }
 
 
@@ -417,10 +417,10 @@ my %colors =
 
    for my $v ("arm", "x86", "ppc", "sparc")
    {
-      
+
       if (check_arch_tools ($v) == 0)
       {
-         $nb_arch++; 
+         $nb_arch++;
       }
    }
 
@@ -433,13 +433,13 @@ my %colors =
 
    concat_flags ("CONFIG_CFLAGS", @cflags);
    concat_flags ("CONFIG_LDFLAGS", @ldflags);
-   
+
    if ($sys_kind =~ /CYGWIN/ )
    {
       my $tmp_path = `cygpath.exe -d $ENV{PWD}/misc/grub-boot-only.img`;
       chomp ($tmp_path);
       $tmp_path =~ s/\\/\\\\/g;
-      
+
       my $tmp_path2 = `cygpath.exe -d $ENV{PWD}/toolchain/qemu`;
       chomp ($tmp_path2);
       $tmp_path2 =~ s/\\/\\\\/g;
@@ -450,8 +450,8 @@ my %colors =
    {
       $makevars{'CONFIG_QEMU_x86'} = " -fda grub-boot-only.img ";
    }
-   
- 
+
+
    if ($use_instrumentation == 1)
    {
    	print $colors{"GREEN"}."Set instrumentation flag\n".$colors{"STD"};
@@ -465,9 +465,9 @@ my %colors =
 
    if ($use_spoq == 1)
    {
-      $makevars{"SPOQ"} = "1"; 
+      $makevars{"SPOQ"} = "1";
    }
-  
+
    create_env ();
 
    check_ocarina ();
@@ -477,4 +477,3 @@ my %colors =
    print $colors{"GREEN"}."DONE !\n".$colors{"STD"};
 
 # }} Main
-

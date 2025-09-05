@@ -26,28 +26,34 @@
 
 /* NVIC (Nested Vectored Interrupt Controller) configuration */
 #ifndef CORTEX_M_NVIC_VECTOR_COUNT
-#define CORTEX_M_NVIC_VECTOR_COUNT 98  /* 16 system + 82 external interrupts for STM32F4 */
+#define CORTEX_M_NVIC_VECTOR_COUNT                                             \
+  98 /* 16 system + 82 external interrupts for STM32F4 */
 #endif
 
-#define CORTEX_M_NVIC_VECTOR_TABLE_SIZE (CORTEX_M_NVIC_VECTOR_COUNT * 4)  /* Each vector is 4 bytes */
+#define CORTEX_M_NVIC_VECTOR_TABLE_SIZE                                        \
+  (CORTEX_M_NVIC_VECTOR_COUNT * 4) /* Each vector is 4 bytes */
 
 /* Calculate next power of 2 for vector table alignment */
 #ifndef CORTEX_M_NVIC_VECTOR_TABLE_ALIGNMENT
-#define CORTEX_M_NVIC_VECTOR_TABLE_ALIGNMENT 512  /* Next power of 2 above vector table size */
+#define CORTEX_M_NVIC_VECTOR_TABLE_ALIGNMENT                                   \
+  512 /* Next power of 2 above vector table size */
 #endif
 
 /* MPU (Memory Protection Unit) configuration */
 #ifndef CORTEX_M_MPU_MAX_REGIONS
-#define CORTEX_M_MPU_MAX_REGIONS 8  /* Standard Cortex-M3/M4 has 8 MPU regions */
+#define CORTEX_M_MPU_MAX_REGIONS                                               \
+  8 /* Standard Cortex-M3/M4 has 8 MPU regions                                 \
+     */
 #endif
 
 #ifndef CORTEX_M_MPU_MIN_REGION_SIZE
-#define CORTEX_M_MPU_MIN_REGION_SIZE 32  /* Minimum MPU region size in bytes */
+#define CORTEX_M_MPU_MIN_REGION_SIZE 32 /* Minimum MPU region size in bytes */
 #endif
 
 /* Thread/Stack configuration */
 #ifndef CORTEX_M_STACK_ALIGNMENT
-#define CORTEX_M_STACK_ALIGNMENT 8  /* ARM Cortex-M requires 8-byte stack alignment */
+#define CORTEX_M_STACK_ALIGNMENT                                               \
+  8 /* ARM Cortex-M requires 8-byte stack alignment */
 #endif
 
 #define CORTEX_M_STACK_ALIGNMENT_MASK (CORTEX_M_STACK_ALIGNMENT - 1)

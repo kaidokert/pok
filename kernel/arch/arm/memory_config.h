@@ -19,7 +19,7 @@
  * \file    arch/arm/memory_config.h
  * \brief   Configurable memory layout definitions for ARM platforms
  * \author  POK team
- * 
+ *
  * This file provides configurable memory layout constants that can be
  * overridden per BSP to support different ARM Cortex-M hardware configurations.
  */
@@ -27,25 +27,25 @@
 /* Default memory configuration - can be overridden by BSP-specific headers */
 
 #ifndef POK_FLASH_BASE
-#define POK_FLASH_BASE    0x08000000  /* Default STM32F4 flash base */
+#define POK_FLASH_BASE 0x08000000UL /* Default STM32F4 flash base */
 #endif
 
 #ifndef POK_SRAM_BASE
-#define POK_SRAM_BASE     0x20000000  /* Default STM32F4 SRAM base */
+#define POK_SRAM_BASE 0x20000000UL /* Default STM32F4 SRAM base */
 #endif
 
 #ifndef POK_SRAM_SIZE
-#define POK_SRAM_SIZE     0x20000     /* Default 128KB SRAM */
+#define POK_SRAM_SIZE 0x20000UL /* Default 128KB SRAM */
 #endif
 
 #ifndef POK_KERNEL_MEMORY_SIZE
-#define POK_KERNEL_MEMORY_SIZE  0x8000  /* Default 32KB for kernel */
+#define POK_KERNEL_MEMORY_SIZE 0x8000UL /* Default 32KB for kernel */
 #endif
 
 /* Derived memory layout */
-#define POK_KERNEL_MEMORY_BASE    POK_SRAM_BASE
-#define POK_USER_MEMORY_BASE      (POK_SRAM_BASE + POK_KERNEL_MEMORY_SIZE)
-#define POK_USER_MEMORY_SIZE      (POK_SRAM_SIZE - POK_KERNEL_MEMORY_SIZE)
+#define POK_KERNEL_MEMORY_BASE POK_SRAM_BASE
+#define POK_USER_MEMORY_BASE (POK_SRAM_BASE + POK_KERNEL_MEMORY_SIZE)
+#define POK_USER_MEMORY_SIZE (POK_SRAM_SIZE - POK_KERNEL_MEMORY_SIZE)
 
 /* Memory alignment constants */
 #define POK_MEMORY_ALIGNMENT 8
@@ -53,7 +53,7 @@
 
 /* Kernel region size for MPU configuration */
 #ifndef POK_KERNEL_REGION_SIZE
-#define POK_KERNEL_REGION_SIZE    POK_KERNEL_MEMORY_SIZE
+#define POK_KERNEL_REGION_SIZE POK_KERNEL_MEMORY_SIZE
 #endif
 
 #endif /* !__POK_ARM_MEMORY_CONFIG_H__ */

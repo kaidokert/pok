@@ -32,7 +32,7 @@ typedef struct {
   uint32_t r9;
   uint32_t r10;
   uint32_t r11;
-  
+
   /* Registers saved by hardware on exception entry - MUST BE SECOND */
   uint32_t r0;
   uint32_t r1;

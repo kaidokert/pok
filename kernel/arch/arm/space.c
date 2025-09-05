@@ -36,13 +36,15 @@
 
 #define KERNEL_STACK_SIZE 4096
 #define MEMORY_WASTE_THRESHOLD_PERCENT 25
-#define MEMORY_WASTE_CRITICAL_PERCENT 50  /* Fail allocation if waste exceeds this */
-#define STACK_ALIGNMENT_BYTES CORTEX_M_STACK_ALIGNMENT  /* ARM Cortex-M requires 8-byte stack alignment */
+#define MEMORY_WASTE_CRITICAL_PERCENT                                          \
+  50 /* Fail allocation if waste exceeds this */
+#define STACK_ALIGNMENT_BYTES                                                  \
+  CORTEX_M_STACK_ALIGNMENT /* ARM Cortex-M requires 8-byte stack alignment */
 #define STACK_ALIGNMENT_MASK CORTEX_M_STACK_ALIGNMENT_MASK
 
 /* Helper function to align address down while keeping it within bounds */
 static inline uint32_t align_down(uint32_t value, uint32_t alignment) {
-    return value & ~(alignment - 1);
+  return value & ~(alignment - 1);
 }
 
 /* Partition space information */
@@ -96,19 +98,22 @@ pok_ret_t pok_create_space(uint8_t partition_id, uint32_t addr, uint32_t size) {
     uint32_t waste_percent = (exposed_memory * 100) / size;
     if (waste_percent > MEMORY_WASTE_CRITICAL_PERCENT) {
 #ifdef POK_NEEDS_DEBUG
-      printf("ERROR: Partition %d MPU alignment wastes %u%% memory (%u bytes) - exceeds %u%% limit\n",
-             partition_id, waste_percent, exposed_memory, MEMORY_WASTE_CRITICAL_PERCENT);
+      printf("ERROR: Partition %d MPU alignment wastes %u%% memory (%u bytes) "
+             "- exceeds %u%% limit\n",
+             partition_id, waste_percent, exposed_memory,
+             MEMORY_WASTE_CRITICAL_PERCENT);
 #endif
       return POK_ERRNO_EINVAL;
     }
-    
+
     /* Clear exposed memory to prevent information disclosure */
     void *exposed_start = (void *)(addr + size);
     memset(exposed_start, 0, exposed_memory);
-    
+
 #ifdef POK_NEEDS_DEBUG
     if (waste_percent > MEMORY_WASTE_THRESHOLD_PERCENT) {
-      printf("WARNING: Partition %d MPU alignment wastes %u%% memory (%u bytes) - cleared for security\n",
+      printf("WARNING: Partition %d MPU alignment wastes %u%% memory (%u "
+             "bytes) - cleared for security\n",
              partition_id, waste_percent, exposed_memory);
     }
 #endif
@@ -123,17 +128,20 @@ pok_ret_t pok_create_space(uint8_t partition_id, uint32_t addr, uint32_t size) {
     return POK_ERRNO_EINVAL;
   }
 
-  /* Configure MPU region for partition with subregion support to hide unused memory */
-  if (aligned_size >= ARM_MPU_MIN_SUBREGION_SIZE && (aligned_size - size) >= (size / 4)) {
+  /* Configure MPU region for partition with subregion support to hide unused
+   * memory */
+  if (aligned_size >= ARM_MPU_MIN_SUBREGION_SIZE &&
+      (aligned_size - size) >= (size / 4)) {
     /* Use subregions if region is large enough and waste is significant */
-    if (pok_mpu_configure_region_with_subregions(region_id, addr, size, aligned_size, mpu_attributes) !=
+    if (pok_mpu_configure_region_with_subregions(
+            region_id, addr, size, aligned_size, mpu_attributes) !=
         POK_ERRNO_OK) {
       return POK_ERRNO_EFAULT;
     }
   } else {
     /* Use standard region configuration for small regions */
-    if (pok_mpu_configure_region(region_id, addr, aligned_size, mpu_attributes) !=
-        POK_ERRNO_OK) {
+    if (pok_mpu_configure_region(region_id, addr, aligned_size,
+                                 mpu_attributes) != POK_ERRNO_OK) {
       return POK_ERRNO_EFAULT;
     }
   }
@@ -267,10 +275,12 @@ uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,
   /* Initialize ARM Cortex-M context */
   ctx->r0 = arg1; /* First argument */
   ctx->r1 = arg2; /* Second argument */
-  ctx->sp = align_down(stack_abs, STACK_ALIGNMENT_BYTES); /* User stack pointer (8-byte aligned, within bounds) */
-  ctx->lr = ARM_EXC_RETURN_THREAD_PSP;  /* Return to Thread mode, use PSP */
-  ctx->pc = entry_abs;             /* Entry point */
-  ctx->xpsr = 0x01000000;          /* Thumb bit set */
+  ctx->sp = align_down(stack_abs,
+                       STACK_ALIGNMENT_BYTES); /* User stack pointer (8-byte
+                                                  aligned, within bounds) */
+  ctx->lr = ARM_EXC_RETURN_THREAD_PSP; /* Return to Thread mode, use PSP */
+  ctx->pc = entry_abs;                 /* Entry point */
+  ctx->xpsr = 0x01000000;              /* Thumb bit set */
 
 #ifdef POK_NEEDS_DEBUG
   printf("space_context_create %d: entry=%x stack=%x arg1=%x arg2=%x ksp=%x\n",
