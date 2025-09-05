@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <libc.h>
 #include <core/time.h>
+#include "test_deployment.h"
 #include <core/sched.h>
 #include "../nvic.h"
 #include "clock_config.h"
@@ -84,6 +85,5 @@ void pok_timer_handler(void) {
   pok_tick_counter++;
   
   /* Trigger scheduler if needed */
-  extern void pok_sched_end_period(void);
-  pok_sched_end_period();
+  (void)pok_sched_end_period();
 }

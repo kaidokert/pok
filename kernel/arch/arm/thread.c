@@ -28,11 +28,12 @@
 
 /* Architecture-specific headers */
 #include "arch.h"
+#include "cortex_m_config.h"
 #include "nvic.h"
 #include "thread.h"
 
-#define STACK_ALIGNMENT 8
-#define STACK_ALIGNMENT_MASK 0x7u
+#define STACK_ALIGNMENT CORTEX_M_STACK_ALIGNMENT
+#define STACK_ALIGNMENT_MASK CORTEX_M_STACK_ALIGNMENT_MASK
 
 /**
  * Create a thread context with proper ARM Cortex-M stack frame

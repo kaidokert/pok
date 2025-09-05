@@ -25,15 +25,16 @@
 
 /* Architecture-specific headers */
 #include "arch.h"
+#include "cortex_m_config.h"
 #include "nvic.h"
 
 /* External vector table (defined in startup code) */
 extern vector_table_entry_t vector_table[]; /* Original ROM vector table */
 
 /* RAM-based vector table for runtime handler updates */
-#define NVIC_VECTOR_COUNT 98  /* 16 system + 82 external interrupts */
-#define NVIC_VECTOR_TABLE_SIZE (NVIC_VECTOR_COUNT * 4)  /* 98 * 4 = 392 bytes */
-#define NVIC_VECTOR_TABLE_ALIGNMENT 512  /* Next power of 2 above 392 */
+#define NVIC_VECTOR_COUNT CORTEX_M_NVIC_VECTOR_COUNT
+#define NVIC_VECTOR_TABLE_SIZE CORTEX_M_NVIC_VECTOR_TABLE_SIZE
+#define NVIC_VECTOR_TABLE_ALIGNMENT CORTEX_M_NVIC_VECTOR_TABLE_ALIGNMENT
 static vector_table_entry_t ram_vector_table[NVIC_VECTOR_COUNT] __attribute__((aligned(NVIC_VECTOR_TABLE_ALIGNMENT)));
 static uint8_t vector_table_relocated = 0;
 

@@ -78,7 +78,7 @@ pok_ret_t pok_cons_init(void) {
   GPIOA_OSPEEDR &= ~((3 << 18) | (3 << 20)); /* Clear speed bits */
   GPIOA_OSPEEDR |= (3 << 18) | (3 << 20);    /* Set very high speed (100MHz) */
   
-  /* Configure pull-up for TX, no pull for RX (typical UART config) */
+  /* Configure pull-up for RX, no pull for TX (USART idle high; TX is driven) */
   GPIOA_PUPDR &= ~((3 << 18) | (3 << 20));   /* Clear pull bits */
   GPIOA_PUPDR |= (1 << 20);                  /* PA10 (RX) pull-up, PA9 (TX) no pull */
   /* Configure USART1 baud rate */

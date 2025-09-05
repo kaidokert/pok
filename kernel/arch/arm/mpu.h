@@ -17,6 +17,7 @@
 
 #include <errno.h>
 #include <types.h>
+#include "cortex_m_config.h"
 
 /* ARM Cortex-M MPU Register Base */
 #define MPU_BASE 0xE000ED90
@@ -97,7 +98,7 @@
 #define MPU_IS_ALIGNED(addr, size) (((addr) & ((size) - 1)) == 0)
 
 /* Maximum number of MPU regions */
-#define MPU_MAX_REGIONS 8
+#define MPU_MAX_REGIONS CORTEX_M_MPU_MAX_REGIONS
 
 /* MPU region configuration structure */
 typedef struct {

@@ -29,15 +29,21 @@
 
 /* Architecture-specific headers */
 #include "arch.h"
+#include "cortex_m_config.h"
 #include "mpu.h"
+#include "mpu_utils.h"
 #include "thread.h"
 
 #define KERNEL_STACK_SIZE 4096
-#define MPU_MIN_REGION_SIZE 32
 #define MEMORY_WASTE_THRESHOLD_PERCENT 25
 #define MEMORY_WASTE_CRITICAL_PERCENT 50  /* Fail allocation if waste exceeds this */
-#define STACK_ALIGNMENT_BYTES 8  /* ARM Cortex-M requires 8-byte stack alignment */
-#define STACK_ALIGNMENT_MASK (STACK_ALIGNMENT_BYTES - 1)
+#define STACK_ALIGNMENT_BYTES CORTEX_M_STACK_ALIGNMENT  /* ARM Cortex-M requires 8-byte stack alignment */
+#define STACK_ALIGNMENT_MASK CORTEX_M_STACK_ALIGNMENT_MASK
+
+/* Helper function to align address down while keeping it within bounds */
+static inline uint32_t align_down(uint32_t value, uint32_t alignment) {
+    return value & ~(alignment - 1);
+}
 
 /* Partition space information */
 struct pok_space {
@@ -81,16 +87,7 @@ pok_ret_t pok_create_space(uint8_t partition_id, uint32_t addr, uint32_t size) {
   mpu_attributes = MPU_CONFIG_SRAM_DATA;
 
   /* Align size to power of 2 (MPU requirement) */
-  uint32_t aligned_size;
-  if (size <= MPU_MIN_REGION_SIZE) {
-    aligned_size = MPU_MIN_REGION_SIZE;
-  } else {
-    /* Optimize: use bit manipulation to find next power of 2 */
-    aligned_size = 1;
-    while (aligned_size < size) {
-      aligned_size <<= 1;
-    }
-  }
+  uint32_t aligned_size = mpu_align_size_to_power_of_2(size);
 
   /* Security fix: clear exposed memory due to MPU alignment */
   uint32_t exposed_memory = aligned_size - size;
@@ -118,7 +115,7 @@ pok_ret_t pok_create_space(uint8_t partition_id, uint32_t addr, uint32_t size) {
   }
 
   /* Validate base address alignment matches MPU requirements */
-  if ((addr & (aligned_size - 1)) != 0) {
+  if (!mpu_is_aligned(addr, aligned_size)) {
 #ifdef POK_NEEDS_DEBUG
     printf("ERROR: Partition %d base addr 0x%x not aligned to size 0x%x\n",
            partition_id, addr, aligned_size);
@@ -189,18 +186,10 @@ pok_ret_t pok_create_code_region(uint8_t partition_id, uint32_t code_addr,
   mpu_attributes = MPU_CONFIG_FLASH_CODE;
 
   /* Align size to power of 2 (MPU requirement) */
-  uint32_t aligned_size;
-  if (code_size <= MPU_MIN_REGION_SIZE) {
-    aligned_size = MPU_MIN_REGION_SIZE;
-  } else {
-    aligned_size = 1;
-    while (aligned_size < code_size) {
-      aligned_size <<= 1;
-    }
-  }
+  uint32_t aligned_size = mpu_align_size_to_power_of_2(code_size);
 
   /* Validate base address alignment matches MPU requirements */
-  if ((code_addr & (aligned_size - 1)) != 0) {
+  if (!mpu_is_aligned(code_addr, aligned_size)) {
 #ifdef POK_NEEDS_DEBUG
     printf(
         "ERROR: Partition %d code region addr 0x%x not aligned to size 0x%x\n",
@@ -278,8 +267,7 @@ uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,
   /* Initialize ARM Cortex-M context */
   ctx->r0 = arg1; /* First argument */
   ctx->r1 = arg2; /* Second argument */
-  ctx->sp = stack_abs &
-            ~STACK_ALIGNMENT_MASK; /* User stack pointer (8-byte aligned) */
+  ctx->sp = align_down(stack_abs, STACK_ALIGNMENT_BYTES); /* User stack pointer (8-byte aligned, within bounds) */
   ctx->lr = ARM_EXC_RETURN_THREAD_PSP;  /* Return to Thread mode, use PSP */
   ctx->pc = entry_abs;             /* Entry point */
   ctx->xpsr = 0x01000000;          /* Thumb bit set */

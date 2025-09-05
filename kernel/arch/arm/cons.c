@@ -1,1 +1,1 @@
-
+/* Intentionally empty: ARM generic console is BSP-specific (see arch/arm/<bsp>/cons.c). */

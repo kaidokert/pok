@@ -27,7 +27,7 @@ void thread1_job(void) {
   
   while (1) {
     printf("Hello from ARM Cortex-M thread 1, iteration %d\n", i++);
-    pok_thread_sleep(1000);  /* Sleep for 1 second */
+    pok_thread_sleep(1000000);  /* Sleep for 1 second */
   }
 }
 
@@ -36,8 +36,19 @@ void thread2_job(void) {
   
   while (1) {
     printf("Hello from ARM Cortex-M thread 2, iteration %d\n", i++);
-    pok_thread_sleep(1500);  /* Sleep for 1.5 seconds */
+    pok_thread_sleep(1500000);  /* Sleep for 1.5 seconds */
   }
+}
+
+static inline void setup_thread_attributes(pok_thread_attr_t *attr, void *entry) {
+  attr->entry = entry;
+  attr->priority = 1;
+  attr->stack_size = 1024;
+  attr->processor_affinity = 0;
+  attr->period = 0;
+  attr->deadline = 0;
+  attr->time_capacity = 0;
+  attr->state = POK_STATE_RUNNABLE;
 }
 
 int main(void) {
@@ -49,14 +60,7 @@ int main(void) {
   printf("====================================\n");
   
   /* Setup first thread attributes */
-  attr1.entry = (void *)thread1_job;
-  attr1.priority = 1;
-  attr1.stack_size = 1024;
-  attr1.processor_affinity = 0;
-  attr1.period = 0;
-  attr1.deadline = 0;
-  attr1.time_capacity = 0;
-  attr1.state = POK_STATE_RUNNABLE;
+  setup_thread_attributes(&attr1, (void *)thread1_job);
   
   /* Create first thread */
   ret = pok_thread_create(&tid1, &attr1);
@@ -66,14 +70,7 @@ int main(void) {
   }
   
   /* Setup second thread attributes */
-  attr2.entry = (void *)thread2_job;
-  attr2.priority = 1;
-  attr2.stack_size = 1024;
-  attr2.processor_affinity = 0;
-  attr2.period = 0;
-  attr2.deadline = 0;
-  attr2.time_capacity = 0;
-  attr2.state = POK_STATE_RUNNABLE;
+  setup_thread_attributes(&attr2, (void *)thread2_job);
   
   /* Create second thread */
   ret = pok_thread_create(&tid2, &attr2);

@@ -28,6 +28,7 @@
 /* Architecture-specific headers */
 #include "arch.h"
 #include "mpu.h"
+#include "mpu_utils.h"
 
 static uint8_t mpu_region_count = 0;
 static mpu_region_t mpu_regions[MPU_MAX_REGIONS];
@@ -272,8 +273,8 @@ inline uint8_t pok_mpu_get_region_count(void) { return (mpu_region_count); }
 uint32_t pok_mpu_size_to_rasr(uint32_t size) {
   uint32_t rasr_size = 0;
 
-  /* Size must be power of 2 and >= 32 bytes */
-  if (size < 32 || (size & (size - 1)) != 0) {
+  /* Size must be power of 2 and >= minimum size */
+  if (size < MPU_MIN_REGION_SIZE || !mpu_is_power_of_2(size)) {
     return (0); /* Invalid size */
   }
 

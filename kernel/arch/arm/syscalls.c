@@ -137,8 +137,7 @@ void __attribute__((naked)) PendSV_Handler(void) {
       "mrs r0, psp                \n" /* Get current Process Stack Pointer */
       "cbz r0, 1f                 \n" /* Skip if PSP is NULL (first time) */
 
-      "stmdb r0!, {r4-r11}        \n" /* Save r4-r11 (caller-saved regs) to
-                                         stack */
+      "stmdb r0!, {r4-r11}        \n" /* Save r4-r11 (callee-saved regs) */
 
       /* Store updated PSP to old thread's stack pointer */
       "ldr r1, =g_old_sp_ptr      \n" /* Load address of g_old_sp_ptr */

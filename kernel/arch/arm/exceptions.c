@@ -59,6 +59,26 @@ static void fault_put_hex(uint32_t value) {
   }
 }
 
+static void fault_put_dec(uint32_t value) {
+  char buf[10];
+  int i = 0;
+  
+  if (value == 0) {
+    fault_putc('0');
+    return;
+  }
+  
+  while (value > 0) {
+    buf[i++] = '0' + (value % 10);
+    value /= 10;
+  }
+  
+  /* Print digits in reverse order */
+  while (i > 0) {
+    fault_putc(buf[--i]);
+  }
+}
+
 /* CFSR (Configurable Fault Status Register) bits */
 #define SCB_CFSR (*((volatile uint32_t *)(SCB_BASE + 0x28)))
 #define CFSR_MMARVALID (1 << 7)  /* MemManage Fault Address Register valid */
@@ -71,19 +91,22 @@ static void UsageFault_Handler_C(uint32_t *frame);
 static void HardFault_Handler_C(uint32_t *frame);
 
 /*
- * Memory Management Fault Handler - Naked wrapper
+ * Macro to generate naked fault handler wrappers
  * Determines correct stack pointer (MSP vs PSP) based on EXC_RETURN
  */
-void __attribute__((naked)) MemManage_Handler(void) {
-  __asm volatile(
-      "tst lr, #4                 \n" /* Test EXC_RETURN[2] */
-      "ite eq                     \n" /* If-Then-Else */
-      "mrseq r0, msp              \n" /* If EXC_RETURN[2]==0, use MSP */
-      "mrsne r0, psp              \n" /* If EXC_RETURN[2]==1, use PSP */
-      "b MemManage_Handler_C      \n" /* Call C handler with correct frame */
-      ::
-          : "r0", "memory");
+#define DEFINE_FAULT_HANDLER_WRAPPER(handler_name, c_handler_name) \
+void __attribute__((naked)) handler_name(void) { \
+  __asm volatile( \
+      "tst lr, #4                 \n" /* Test EXC_RETURN[2] */ \
+      "ite eq                     \n" /* If-Then-Else */ \
+      "mrseq r0, msp              \n" /* If EXC_RETURN[2]==0, use MSP */ \
+      "mrsne r0, psp              \n" /* If EXC_RETURN[2]==1, use PSP */ \
+      "b " #c_handler_name "      \n" /* Call C handler with correct frame */ \
+      :: \
+          : "r0", "memory"); \
 }
+
+DEFINE_FAULT_HANDLER_WRAPPER(MemManage_Handler, MemManage_Handler_C)
 
 /*
  * Memory Management Fault Handler - C implementation
@@ -110,7 +133,7 @@ static void MemManage_Handler_C(uint32_t *frame) {
   }
 
   /* Clear MemManage fault flags in CFSR */
-  SCB_CFSR = cfsr & ARM_CFSR_MMFSR_MASK; /* Clear MMFSR bits */
+  SCB_CFSR = ARM_CFSR_MMFSR_MASK; /* Clear MMFSR bits by writing 1s */
 
   /* Get current partition */
   extern uint8_t pok_current_partition;
@@ -119,13 +142,13 @@ static void MemManage_Handler_C(uint32_t *frame) {
 #ifdef POK_NEEDS_DEBUG
   if (cfsr & CFSR_MMARVALID) {
     fault_puts("MemManage fault in partition ");
-    fault_putc('0' + partition_id);
+    fault_put_dec(partition_id);
     fault_puts(" at address ");
     fault_put_hex(fault_addr);
     fault_puts("\n");
   } else {
     fault_puts("MemManage fault in partition ");
-    fault_putc('0' + partition_id);
+    fault_put_dec(partition_id);
     fault_puts(" (address not available)\n");
   }
   fault_puts("PC: ");
@@ -150,20 +173,7 @@ static void MemManage_Handler_C(uint32_t *frame) {
   while (1) { __asm volatile("wfi"); }
 }
 
-/*
- * Bus Fault Handler - Naked wrapper
- * Determines correct stack pointer (MSP vs PSP) based on EXC_RETURN
- */
-void __attribute__((naked)) BusFault_Handler(void) {
-  __asm volatile(
-      "tst lr, #4                 \n" /* Test EXC_RETURN[2] */
-      "ite eq                     \n" /* If-Then-Else */
-      "mrseq r0, msp              \n" /* If EXC_RETURN[2]==0, use MSP */
-      "mrsne r0, psp              \n" /* If EXC_RETURN[2]==1, use PSP */
-      "b BusFault_Handler_C       \n" /* Call C handler with correct frame */
-      ::
-          : "r0", "memory");
-}
+DEFINE_FAULT_HANDLER_WRAPPER(BusFault_Handler, BusFault_Handler_C)
 
 /*
  * Bus Fault Handler - C implementation
@@ -189,7 +199,7 @@ static void BusFault_Handler_C(uint32_t *frame) {
   }
 
   /* Clear Bus fault flags in CFSR */
-  SCB_CFSR = (cfsr & ARM_CFSR_BFSR_MASK); /* Clear BFSR bits (no shift needed) */
+  SCB_CFSR = ARM_CFSR_BFSR_MASK; /* Clear BFSR bits by writing 1s */
 
   extern uint8_t pok_current_partition;
   partition_id = pok_current_partition;
@@ -197,13 +207,13 @@ static void BusFault_Handler_C(uint32_t *frame) {
 #ifdef POK_NEEDS_DEBUG
   if (cfsr & CFSR_BFARVALID) {
     fault_puts("BusFault in partition ");
-    fault_putc('0' + partition_id);
+    fault_put_dec(partition_id);
     fault_puts(" at address ");
     fault_put_hex(fault_addr);
     fault_puts("\n");
   } else {
     fault_puts("BusFault in partition ");
-    fault_putc('0' + partition_id);
+    fault_put_dec(partition_id);
     fault_puts(" (address not available)\n");
   }
   fault_puts("PC: ");
@@ -224,20 +234,7 @@ static void BusFault_Handler_C(uint32_t *frame) {
   while (1) { __asm volatile("wfi"); }
 }
 
-/*
- * Usage Fault Handler - Naked wrapper
- * Determines correct stack pointer (MSP vs PSP) based on EXC_RETURN
- */
-void __attribute__((naked)) UsageFault_Handler(void) {
-  __asm volatile(
-      "tst lr, #4                 \n" /* Test EXC_RETURN[2] */
-      "ite eq                     \n" /* If-Then-Else */
-      "mrseq r0, msp              \n" /* If EXC_RETURN[2]==0, use MSP */
-      "mrsne r0, psp              \n" /* If EXC_RETURN[2]==1, use PSP */
-      "b UsageFault_Handler_C     \n" /* Call C handler with correct frame */
-      ::
-          : "r0", "memory");
-}
+DEFINE_FAULT_HANDLER_WRAPPER(UsageFault_Handler, UsageFault_Handler_C)
 
 /*
  * Usage Fault Handler - C implementation
@@ -257,11 +254,11 @@ static void UsageFault_Handler_C(uint32_t *frame) {
 
   /* Clear Usage fault flags in CFSR */
   uint32_t cfsr = SCB_CFSR;
-  SCB_CFSR = (cfsr & ARM_CFSR_UFSR_MASK); /* Clear UFSR bits (upper 16 bits) */
+  SCB_CFSR = ARM_CFSR_UFSR_MASK; /* Clear UFSR bits by writing 1s */
 
 #ifdef POK_NEEDS_DEBUG
   fault_puts("UsageFault in partition ");
-  fault_putc('0' + partition_id);
+  fault_put_dec(partition_id);
   fault_puts("\n");
   fault_puts("PC: ");
   fault_put_hex(frame[6]);
@@ -283,20 +280,7 @@ static void UsageFault_Handler_C(uint32_t *frame) {
  * Hard Fault Handler
  * Last resort fault handler
  */
-/*
- * Hard Fault Handler - Naked wrapper
- * Determines correct stack pointer (MSP vs PSP) based on EXC_RETURN
- */
-void __attribute__((naked)) HardFault_Handler(void) {
-  __asm volatile(
-      "tst lr, #4                 \n" /* Test EXC_RETURN[2] */
-      "ite eq                     \n" /* If-Then-Else */
-      "mrseq r0, msp              \n" /* If EXC_RETURN[2]==0, use MSP */
-      "mrsne r0, psp              \n" /* If EXC_RETURN[2]==1, use PSP */
-      "b HardFault_Handler_C      \n" /* Call C handler with correct frame */
-      ::
-          : "r0", "memory");
-}
+DEFINE_FAULT_HANDLER_WRAPPER(HardFault_Handler, HardFault_Handler_C)
 
 /*
  * Hard Fault Handler - C implementation
@@ -315,7 +299,7 @@ static void HardFault_Handler_C(uint32_t *frame) {
 
 #ifdef POK_NEEDS_DEBUG
   fault_puts("HardFault in partition ");
-  fault_putc('0' + partition_id);
+  fault_put_dec(partition_id);
   fault_puts("\n");
   fault_puts("PC: ");
   fault_put_hex(frame[6]);
