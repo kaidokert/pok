@@ -23,7 +23,7 @@ SECTIONS
   {
     . = ALIGN(0x200);
     KEEP(*(.isr_vector))
-    . = ALIGN(8);
+    /* Note: No additional alignment needed - 512 bytes is already 8-byte aligned */
   } >FLASH
 
   /* Program code and constants */

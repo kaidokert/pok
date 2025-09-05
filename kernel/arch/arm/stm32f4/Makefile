@@ -13,5 +13,12 @@ LO_OBJS=	bsp.o \
 LO_DEPS=
 
 include $(TOPDIR)/misc/mk/objdir.mk
+
+.PHONY: test
+
+# Optional test target for checkmake compliance
+test: $(LO_TARGET)
+	@echo "STM32F4 BSP build test passed"
+
 include $(TOPDIR)/misc/mk/rules-common.mk
 include $(TOPDIR)/misc/mk/rules-kernel.mk

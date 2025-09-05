@@ -47,9 +47,7 @@ static inline void fault_putc(char c) {
 static void fault_puts(const char *s) {
   while (*s) {
     fault_putc(*s++);
-    /* Small delay to allow UART to catch up */
-    for (volatile int i = 0; i < 1000; i++)
-      ;
+    /* Best-effort only; no delay to avoid prolonging fault handling */
   }
 }
 

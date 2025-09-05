@@ -63,8 +63,18 @@ uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
   sp->ctx.lr = ARM_EXC_RETURN_THREAD_PSP; /* Return to Thread mode, use PSP */
   sp->ctx.xpsr = 0x01000000;              /* Thumb bit set */
   /* Ensure 8-byte aligned stack pointer */
-  sp->ctx.sp = ((uint32_t)stack_addr + stack_size - STACK_ALIGNMENT) &
-               ~STACK_ALIGNMENT_MASK;
+  uint32_t aligned_sp = ((uint32_t)stack_addr + stack_size - STACK_ALIGNMENT) &
+                        ~STACK_ALIGNMENT_MASK;
+
+  /* Check that aligned_sp is within stack bounds */
+  if (aligned_sp < (uint32_t)stack_addr) {
+    /* If out of bounds, set to minimum valid value or handle error */
+    aligned_sp = (uint32_t)stack_addr;
+    /* Optionally, you could log an error or assert here */
+    /* assert(false && "Aligned stack pointer out of bounds"); */
+  }
+
+  sp->ctx.sp = aligned_sp;
 
   sp->entry = entry;
   sp->id = thread_id;
@@ -98,7 +108,7 @@ void pok_context_switch(uint32_t *old_sp, uint32_t new_sp) {
   __asm volatile("dsb" ::: "memory");
 
   /* Trigger PendSV exception to perform context switch */
-  SCB_ICSR |= SCB_ICSR_PENDSVSET;
+  SCB_ICSR = SCB_ICSR_PENDSVSET;
 
   /* Memory barrier to ensure PendSV is triggered */
   __asm volatile("dsb; isb" ::: "memory");

@@ -66,13 +66,15 @@ pok_ret_t pok_arch_preempt_disable() {
 }
 
 pok_ret_t pok_arch_preempt_enable() {
-  __asm volatile("cpsie i" : : : "memory");
   __asm volatile("dsb" : : : "memory");
   __asm volatile("isb" : : : "memory");
+  __asm volatile("cpsie i" : : : "memory");
   return POK_ERRNO_OK;
 }
 
-pok_ret_t pok_arch_idle() {
+void pok_arch_idle() __attribute__((noreturn));
+
+void pok_arch_idle() {
   while (1) {
     __asm volatile("wfi");
   }
@@ -84,12 +86,20 @@ pok_ret_t pok_arch_event_register(uint8_t vector, void (*handler)(void)) {
 
 uint32_t pok_thread_stack_addr(const uint8_t partition_id,
                                const uint32_t local_thread_id) {
-  return pok_partitions[partition_id].size - 8 -
-         (local_thread_id * POK_USER_STACK_SIZE);
+  uint32_t stack_offset = local_thread_id * POK_USER_STACK_SIZE + 8;
+  uint32_t partition_size = pok_partitions[partition_id].size;
+
+  /* Add validation to ensure the computed address does not underflow */
+  if (stack_offset >= partition_size) {
+    /* Return an error value or handle gracefully */
+    return 0; /* Invalid stack address */
+  }
+
+  return partition_size - stack_offset;
 }
 
 __attribute__((noreturn)) void pok_division_by_zero_error(void) {
-  /* Force a division by zero to trigger HardFault */
+  /* Force a division by zero to trigger UsageFault (when DIV_0_TRP enabled) */
   volatile int zero = 0;
   volatile int result = 42 / zero;
   (void)result;

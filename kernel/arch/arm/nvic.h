@@ -83,9 +83,9 @@
 /* Priority levels */
 #define NVIC_PRIORITY_HIGHEST 0
 #define NVIC_PRIORITY_HIGH 1
-#define NVIC_PRIORITY_NORMAL 2
-#define NVIC_PRIORITY_LOW 3
-#define NVIC_PRIORITY_LOWEST 4
+#define NVIC_PRIORITY_NORMAL 8
+#define NVIC_PRIORITY_LOW 14
+#define NVIC_PRIORITY_LOWEST 15
 
 /* Maximum external interrupt number */
 #define NVIC_MAX_IRQ 239

@@ -20,7 +20,7 @@ partitions:
       scheduler: RR
       threads:
           count: 2
-          features: [sleep, suspend]
+          features: [sleep]
       size: 24kB
       objects: ["main.o"]
 

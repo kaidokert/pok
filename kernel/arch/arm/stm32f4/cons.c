@@ -66,41 +66,93 @@
   (*((volatile uint32_t *)(GPIOA_BASE + 0x24))) /* AF[15:8]                    \
                                                  */
 
+/* GPIO pin definitions for PA9 (TX) and PA10 (RX) */
+#define PA9_PIN_POS 9
+#define PA10_PIN_POS 10
+#define PA9_MODER_POS                                                          \
+  (PA9_PIN_POS * 2) /* 18 - Mode register uses 2 bits per pin */
+#define PA10_MODER_POS                                                         \
+  (PA10_PIN_POS * 2)  /* 20 - Mode register uses 2 bits per pin */
+#define PA9_AF_POS 4  /* AFRH register: PA9 uses bits 4-7 */
+#define PA10_AF_POS 8 /* AFRH register: PA10 uses bits 8-11 */
+
+/* GPIO mode values */
+#define GPIO_MODE_INPUT 0
+#define GPIO_MODE_OUTPUT 1
+#define GPIO_MODE_AF 2 /* Alternate function */
+#define GPIO_MODE_ANALOG 3
+
+/* GPIO speed values */
+#define GPIO_SPEED_LOW 0       /* 2 MHz */
+#define GPIO_SPEED_MEDIUM 1    /* 25 MHz */
+#define GPIO_SPEED_HIGH 2      /* 50 MHz */
+#define GPIO_SPEED_VERY_HIGH 3 /* 100 MHz */
+
+/* GPIO pull-up/pull-down values */
+#define GPIO_PUPD_NONE 0
+#define GPIO_PUPD_UP 1
+#define GPIO_PUPD_DOWN 2
+
+/* Alternate function values */
+#define GPIO_AF7_USART 7
+
 pok_ret_t pok_cons_init(void) {
   /* Enable GPIOA and USART1 clocks */
   RCC_AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
   RCC_APB2ENR |= RCC_APB2ENR_USART1EN;
 
   /* Configure PA9 (TX) and PA10 (RX) as alternate function */
-  GPIOA_MODER &= ~((3 << 18) | (3 << 20)); /* Clear mode bits for PA9, PA10 */
-  GPIOA_MODER |= (2 << 18) | (2 << 20);    /* Set alternate function mode */
+  GPIOA_MODER &= ~((3 << PA9_MODER_POS) |
+                   (3 << PA10_MODER_POS)); /* Clear mode bits for PA9, PA10 */
+  GPIOA_MODER |=
+      (GPIO_MODE_AF << PA9_MODER_POS) |
+      (GPIO_MODE_AF << PA10_MODER_POS); /* Set alternate function mode */
 
   /* Set alternate function 7 (USART) for PA9 and PA10 */
   /* PA9 = pin 9 (AFRH bit 4-7), PA10 = pin 10 (AFRH bit 8-11) */
-  GPIOA_AFRH &= ~((0xF << 4) | (0xF << 8)); /* Clear AF bits in AFRH register */
-  GPIOA_AFRH |= (7 << 4) | (7 << 8);        /* Set AF7 for PA9 and PA10 */
+  GPIOA_AFRH &= ~((0xF << PA9_AF_POS) |
+                  (0xF << PA10_AF_POS)); /* Clear AF bits in AFRH register */
+  GPIOA_AFRH |= (GPIO_AF7_USART << PA9_AF_POS) |
+                (GPIO_AF7_USART << PA10_AF_POS); /* Set AF7 for PA9 and PA10 */
 
   /* Configure output type as push-pull (default, but explicit) */
-  GPIOA_OTYPER &= ~((1 << 9) | (1 << 10)); /* PA9, PA10 push-pull output */
+  GPIOA_OTYPER &= ~((1 << PA9_PIN_POS) |
+                    (1 << PA10_PIN_POS)); /* PA9, PA10 push-pull output */
 
   /* Configure high speed for 115200 baud reliability */
-  GPIOA_OSPEEDR &= ~((3 << 18) | (3 << 20)); /* Clear speed bits */
-  GPIOA_OSPEEDR |= (3 << 18) | (3 << 20);    /* Set very high speed (100MHz) */
+  GPIOA_OSPEEDR &=
+      ~((3 << PA9_MODER_POS) | (3 << PA10_MODER_POS)); /* Clear speed bits */
+  GPIOA_OSPEEDR |= (GPIO_SPEED_VERY_HIGH << PA9_MODER_POS) |
+                   (GPIO_SPEED_VERY_HIGH
+                    << PA10_MODER_POS); /* Set very high speed (100MHz) */
 
   /* Configure pull-up for RX, no pull for TX (USART idle high; TX is driven) */
-  GPIOA_PUPDR &= ~((3 << 18) | (3 << 20)); /* Clear pull bits */
-  GPIOA_PUPDR |= (1 << 20); /* PA10 (RX) pull-up, PA9 (TX) no pull */
+  GPIOA_PUPDR &=
+      ~((3 << PA9_MODER_POS) | (3 << PA10_MODER_POS)); /* Clear pull bits */
+  GPIOA_PUPDR |= (GPIO_PUPD_UP
+                  << PA10_MODER_POS); /* PA10 (RX) pull-up, PA9 (TX) no pull */
   /* Configure USART1 baud rate */
   /* For oversampling by 16: BRR = (mantissa << 4) + fraction */
   /* USARTDIV = f_CK / (16 * baud_rate) */
   uint32_t apb2_clock = APB2_FREQ_HZ; /* Use correct 84MHz APB2 clock */
   uint32_t baud_rate = 115200;
+
+  /* Bounds checking for baud rate calculation */
+  if (baud_rate == 0) {
+    return POK_ERRNO_EINVAL; /* Avoid division by zero */
+  }
+
   uint32_t usartdiv_scaled = (apb2_clock * 16 + (8 * baud_rate)) /
                              (16 * baud_rate); /* USARTDIV * 16 with rounding */
 
   /* Extract mantissa (integer part) and fraction (4-bit fractional part) */
   uint32_t mantissa = usartdiv_scaled / 16;
   uint32_t fraction = usartdiv_scaled % 16;
+
+  /* Validate that mantissa fits in 12 bits (STM32F4 BRR register limit) */
+  if (mantissa > 0xFFF) {
+    return POK_ERRNO_EINVAL; /* Baud rate too low for this clock frequency */
+  }
 
   /* Pack into BRR register format: mantissa[15:4] | fraction[3:0] */
   USART1_BRR = (mantissa << 4) | (fraction & 0x0F);

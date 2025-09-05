@@ -51,7 +51,7 @@ pok_ret_t pok_timer_init(void) {
 #ifdef POK_NEEDS_DEBUG
     printf("ERROR: SysTick reload value %u exceeds 24-bit limit %u\n",
            TIMER_RELOAD_VAL, SYSTICK_MAX_RELOAD);
-    printf("Consider reducing SYSTEM_CLOCK_HZ or increasing TIMER_TICK_HZ\n");
+    printf("Consider reducing SYSTICK_FREQ_HZ or increasing TIMER_TICK_HZ\n");
 #endif
     return POK_ERRNO_EINVAL;
   }

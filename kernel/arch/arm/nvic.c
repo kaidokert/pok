@@ -27,9 +27,11 @@
 #include "arch.h"
 #include "cortex_m_config.h"
 #include "nvic.h"
+#include "stm32f4/peripherals.h"
 
 /* External vector table (defined in startup code) */
-extern vector_table_entry_t vector_table[]; /* Original ROM vector table */
+/* Note: We get the ROM vector table location from VTOR instead of assuming
+ * a fixed location, making this more robust across different memory layouts */
 
 /* RAM-based vector table for runtime handler updates */
 #define NVIC_VECTOR_COUNT CORTEX_M_NVIC_VECTOR_COUNT
@@ -55,9 +57,25 @@ static pok_ret_t pok_nvic_relocate_vector_table(void) {
     return POK_ERRNO_OK; /* Already relocated */
   }
 
+  /* Get current ROM vector table location from VTOR register
+   * This makes the code more robust across different memory layouts */
+  uint32_t rom_table_addr = SCB_VTOR;
+
+  /* Basic validation of ROM table address (should be in Flash region) */
+  if (rom_table_addr < STM32F4_FLASH_BASE ||
+      rom_table_addr >= (STM32F4_FLASH_BASE + STM32F4_FLASH_SIZE)) {
+#ifdef POK_NEEDS_DEBUG
+    printf("WARNING: ROM vector table at unexpected address: 0x%x\n",
+           rom_table_addr);
+#endif
+  }
+
+  vector_table_entry_t *rom_vector_table =
+      (vector_table_entry_t *)rom_table_addr;
+
   /* Copy ROM vector table to RAM */
   for (int i = 0; i < NVIC_VECTOR_COUNT; i++) {
-    ram_vector_table[i] = vector_table[i];
+    ram_vector_table[i] = rom_vector_table[i];
   }
 
   /* Update VTOR register to point to RAM vector table */
@@ -82,7 +100,6 @@ static pok_ret_t pok_nvic_relocate_vector_table(void) {
 
   __asm volatile("dsb" ::: "memory");
   __asm volatile("isb");
-  return POK_ERRNO_OK;
   return POK_ERRNO_OK;
 }
 

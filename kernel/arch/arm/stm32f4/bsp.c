@@ -142,6 +142,28 @@ uint32_t pok_bsp_kernel_size(void) { return (POK_KERNEL_REGION_SIZE); }
  * @return POK_ERRNO_OK on success, error code on failure
  */
 pok_ret_t pok_stm32f4_clock_init(void) {
+  /* Validate HSE frequency - PLL calculations are hardcoded for 8MHz */
+  if (HSE_FREQ_HZ != 8000000) {
+#ifdef POK_NEEDS_DEBUG
+    printf(
+        "WARNING: HSE frequency is %d Hz, but PLL configuration assumes 8MHz\n",
+        HSE_FREQ_HZ);
+    printf(
+        "         Clock frequencies may be incorrect. Update PLL_M divisor.\n");
+#endif
+  }
+
+  /* Validate USB clock calculation for current HSE */
+  /* USB_CLK = (HSE * PLL_N / PLL_M) / PLL_Q = (HSE * 336 / 8) / 7 */
+  uint32_t calculated_usb_freq = ((uint32_t)HSE_FREQ_HZ * 336U / 8U) / 7U;
+  if (calculated_usb_freq != USB_FREQ_HZ) {
+#ifdef POK_NEEDS_DEBUG
+    printf("WARNING: USB clock will be %d Hz, but USB requires exactly 48MHz\n",
+           calculated_usb_freq);
+    printf("         Adjust PLL_Q divisor if USB functionality is needed.\n");
+#endif
+  }
+
   volatile uint32_t *RCC_CR =
       (volatile uint32_t *)(RCC_BASE + 0x00); /* RCC Clock Control Register */
   volatile uint32_t *RCC_PLLCFGR =

@@ -19,11 +19,19 @@
 
 /*
  * ARM Cortex-M context structure for PendSV context switching
- * This represents the CPU state that must be saved/restored during context
- * switches. Order is critical - must match PendSV handler expectations.
+ *
+ * LAYOUT CRITICAL: Order must match PendSV handler in syscalls.c
+ *
+ * PendSV Handler Flow:
+ * 1. mrs r0, psp              <- Get current PSP
+ * 2. stmdb r0!, {r4-r11}      <- Push r4-r11 onto thread stack
+ * 3. Store r0 to old thread   <- r0 now points after saved r4-r11
+ * 4. ldmia r0!, {r4-r11}      <- Pop r4-r11 from new thread stack
+ * 5. msr psp, r0              <- Set PSP to point after r4-r11
+ * 6. Hardware pops r0-r3,r12,lr,pc,xpsr from PSP stack on return
  */
-typedef struct {
-  /* Registers saved manually by software (PendSV handler) - MUST BE FIRST */
+typedef struct __attribute__((packed)) {
+  /* SOFTWARE-SAVED: PendSV saves these manually (MUST BE FIRST) */
   uint32_t r4;
   uint32_t r5;
   uint32_t r6;
@@ -33,7 +41,7 @@ typedef struct {
   uint32_t r10;
   uint32_t r11;
 
-  /* Registers saved by hardware on exception entry - MUST BE SECOND */
+  /* HARDWARE-SAVED: Exception hardware pushes these onto PSP stack */
   uint32_t r0;
   uint32_t r1;
   uint32_t r2;
@@ -42,7 +50,9 @@ typedef struct {
   uint32_t lr;   /* Link register */
   uint32_t pc;   /* Program counter */
   uint32_t xpsr; /* Program status register */
-  uint32_t sp;   /* Stack pointer (PSP for threads) */
+
+  /* THREAD MANAGEMENT: PSP value managed by context switcher */
+  uint32_t sp; /* Thread Process Stack Pointer (PSP) */
 } context_t;
 
 /*

@@ -80,7 +80,11 @@ void SVC_Handler(void) {
   uint16_t svc_instruction = *svc_addr; /* Read the 16-bit SVC instruction */
   uint8_t svc_number =
       svc_instruction & ARM_SVC_NUMBER_MASK; /* SVC number is in lower 8 bits */
-  (void)svc_number; /* Currently unused - could be used for SVC routing */
+
+  /* TODO: SVC number could be used for syscall routing/validation in the
+   * future. Currently POK uses a single SVC number (0) for all system calls,
+   * with syscall type determined by register arguments. */
+  (void)svc_number;
 
   /*
    * Set up syscall information
@@ -125,6 +129,9 @@ syscall_exit:
 /*
  * PendSV Handler - handles context switches
  * This is called when pok_context_switch() triggers the PendSV exception
+ *
+ * NOTE: FPU context not saved since build uses -mfloat-abi=soft
+ * All floating point operations are handled by software libraries
  */
 void __attribute__((naked)) PendSV_Handler(void) {
   /* Access global variables from thread.c */
