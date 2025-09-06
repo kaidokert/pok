@@ -51,7 +51,7 @@ static inline void setup_thread_attributes(pok_thread_attr_t *attr,
   entry_union.func = func_ptr;
   attr->entry = entry_union.ptr;
   attr->priority = 1;
-  attr->stack_size = 1024;
+  attr->stack_size = 2048;
   attr->processor_affinity = 0;
   attr->period = 0;
   attr->deadline = 0;

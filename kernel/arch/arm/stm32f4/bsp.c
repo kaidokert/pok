@@ -145,13 +145,13 @@ void *pok_bsp_mem_alloc(size_t size) {
   return (ret);
 }
 
-uint32_t pok_bsp_mem_base(void) { return (POK_USER_MEMORY_BASE); }
+uintptr_t pok_bsp_mem_base(void) { return (POK_USER_MEMORY_BASE); }
 
-uint32_t pok_bsp_mem_size(void) { return (POK_USER_MEMORY_SIZE); }
+size_t pok_bsp_mem_size(void) { return (POK_USER_MEMORY_SIZE); }
 
-uint32_t pok_bsp_kernel_base(void) { return (POK_KERNEL_MEMORY_BASE); }
+uintptr_t pok_bsp_kernel_base(void) { return (POK_KERNEL_MEMORY_BASE); }
 
-uint32_t pok_bsp_kernel_size(void) { return (POK_KERNEL_REGION_SIZE); }
+size_t pok_bsp_kernel_size(void) { return (POK_KERNEL_REGION_SIZE); }
 
 /**
  * Initialize STM32F4 system clocks
@@ -222,7 +222,8 @@ pok_ret_t pok_stm32f4_clock_init(void) {
   *RCC_APB1ENR |= (1 << 28); /* PWREN = 1 */
 
   /* Set VOS to Scale 1 (highest performance, required for 168MHz) */
-  *PWR_CR |= (3 << 14); /* VOS[1:0] = 11 (Scale 1 mode) */
+  *PWR_CR =
+      (*PWR_CR & ~(3 << 14)) | (2 << 14); /* VOS[1:0] = 10 (Scale 1 mode) */
 
   /* Wait for voltage regulator to be ready */
   timeout = 1000;

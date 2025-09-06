@@ -72,8 +72,9 @@ uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
   sp->ctx.pc = (uint32_t)pok_arch_thread_start; /* Start with thread wrapper */
   sp->ctx.lr = ARM_EXC_RETURN_THREAD_PSP; /* Return to Thread mode, use PSP */
   sp->ctx.xpsr = 0x01000000;              /* Thumb bit set */
+  sp->ctx.r0 = (uint32_t)sp;              /* Pass context pointer via R0 */
 
-  /* CRITICAL FIX: PSP must point ABOVE the saved context frame
+  /* CRITICAL FIX: PSP must point TO the saved context frame
    * For ARM Cortex-M exception return, PSP points to where stack will be
    * after hardware pops the exception frame (r0-r3,r12,lr,pc,xpsr).
    *
@@ -84,23 +85,20 @@ uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
    * [software frame: r11,r10,r9,r8,r7,r6,r5,r4] <- 8 words (32 bytes)
    * [start_context_t] <- our context structure
    *
-   * PSP should point above hardware frame so exception return works correctly
+   * PSP calculation: initial_psp points to start of hardware frame
+   * for proper exception return
    */
   uint32_t initial_psp =
       (uint32_t)&sp->ctx.r0; /* Points to start of hardware frame */
 
-  /* Calculate 8-byte aligned user stack pointer above hardware frame */
-  uint32_t aligned_sp =
-      (initial_psp + (8 * sizeof(uint32_t)) + STACK_ALIGNMENT - 1) &
-      ~STACK_ALIGNMENT_MASK;
-
-  /* Verify aligned_sp is within valid stack bounds */
-  if (aligned_sp < (uint32_t)stack_addr ||
-      aligned_sp >= (uint32_t)stack_addr + stack_size) {
+  /* Verify that hardware frame fits within stack bounds
+   * (PSP management is handled externally) */
+  uint32_t frame_end = initial_psp + (8 * sizeof(uint32_t));
+  if (frame_end > (uint32_t)stack_addr + stack_size) {
 #ifdef POK_NEEDS_DEBUG
     printf(
-        "Error: aligned stack pointer 0x%08x out of bounds [0x%08x, 0x%08x)\n",
-        aligned_sp, (uint32_t)stack_addr, (uint32_t)stack_addr + stack_size);
+        "Error: hardware frame extends beyond stack bounds [0x%08x, 0x%08x)\n",
+        (uint32_t)stack_addr, (uint32_t)stack_addr + stack_size);
 #endif
     return 0; /* Fail context creation instead of masking error */
   }
@@ -175,25 +173,18 @@ void pok_context_reset(uint32_t stack_size, uint32_t stack_addr) {
   sp->ctx.pc = (uint32_t)pok_arch_thread_start;
   sp->ctx.lr = ARM_EXC_RETURN_THREAD_PSP;
   sp->ctx.xpsr = 0x01000000;
+  sp->ctx.r0 = (uint32_t)sp; /* Pass context pointer via R0 */
 
-  /* CRITICAL FIX: Apply same PSP calculation as pok_context_create
-   * PSP must point ABOVE the saved context frame for ARM Cortex-M exception
-   * return
-   */
+  /* Verify that hardware frame fits within stack bounds
+   * (PSP management is handled externally) */
   uint32_t initial_psp =
       (uint32_t)&sp->ctx.r0; /* Points to start of hardware frame */
-
-  /* Calculate 8-byte aligned user stack pointer above hardware frame */
-  uint32_t aligned_sp =
-      (initial_psp + (8 * sizeof(uint32_t)) + STACK_ALIGNMENT - 1) &
-      ~STACK_ALIGNMENT_MASK;
-
-  /* Verify aligned_sp is within valid stack bounds */
-  if (aligned_sp < stack_addr || aligned_sp >= stack_addr + stack_size) {
+  uint32_t frame_end = initial_psp + (8 * sizeof(uint32_t));
+  if (frame_end > stack_addr + stack_size) {
 #ifdef POK_NEEDS_DEBUG
-    printf("Error: reset aligned stack pointer 0x%08x out of bounds [0x%08x, "
+    printf("Error: reset hardware frame extends beyond stack bounds [0x%08x, "
            "0x%08x)\n",
-           aligned_sp, stack_addr, stack_addr + stack_size);
+           stack_addr, stack_addr + stack_size);
 #endif
     return; /* Cannot safely reset context */
   }
@@ -213,14 +204,11 @@ void pok_arch_thread_start(void) {
   start_context_t *ctx;
   uint32_t entry, thread_id;
 
-  /* Get current context from PSP - PSP points to &ctx.r4, not to ctx itself */
-  uint32_t psp_value;
-  __asm volatile("mrs %0, psp" : "=r"(psp_value));
-
-  /* Calculate start_context_t pointer: PSP points at entry field after hardware
-   * frame The entry field is immediately after the context_t structure */
-  ctx = (start_context_t *)((uint8_t *)psp_value -
-                            offsetof(start_context_t, entry));
+  /* Get current context from R0 - passed by context creation/reset functions
+   * This avoids complex PSP math and potential reconstruction errors */
+  uint32_t ctx_ptr;
+  __asm volatile("mov %0, r0" : "=r"(ctx_ptr));
+  ctx = (start_context_t *)ctx_ptr;
 
   /* Extract thread information */
   entry = ctx->entry;

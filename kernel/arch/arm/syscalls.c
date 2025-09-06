@@ -135,7 +135,15 @@ void SVC_Handler(void) {
   uint32_t user_vaddr = frame[1]; /* r1 - user virtual address */
   uint32_t kernel_offset = pok_partitions[syscall_info.partition].base_addr -
                            pok_partitions[syscall_info.partition].base_vaddr;
-  syscall_args = (pok_syscall_args_t *)(user_vaddr + kernel_offset);
+
+  /* Check for 32-bit pointer addition overflow */
+  uint64_t kernel_addr_64 = (uint64_t)user_vaddr + kernel_offset;
+  if (kernel_addr_64 > 0xFFFFFFFFULL) {
+    syscall_ret = POK_ERRNO_EINVAL; /* Address overflow */
+    goto syscall_exit;
+  }
+
+  syscall_args = (pok_syscall_args_t *)((uint32_t)kernel_addr_64);
 
   /*
    * Execute the system call

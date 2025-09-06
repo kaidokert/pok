@@ -60,9 +60,9 @@ static inline bool mpu_is_power_of_2(uint32_t value) {
  *
  * @param addr Address to check
  * @param size Alignment size (must be power of 2)
- * @return true if aligned, false otherwise
+ * @return TRUE if aligned, FALSE otherwise
  */
-static inline bool mpu_is_aligned(uint32_t addr, uint32_t size) {
+static inline pok_bool_t mpu_is_aligned(uint32_t addr, uint32_t size) {
   return (addr & (size - 1)) == 0;
 }
 

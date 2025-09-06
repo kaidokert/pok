@@ -120,6 +120,7 @@ static void MemManage_Handler_C(uint32_t *frame) {
 
   if (frame == NULL) {
     /* Cannot recover from null frame, halt system */
+    __disable_irq(); /* Prevent livelock or nested faults */
     while (1) {
       __asm volatile("wfi");
     }
@@ -171,6 +172,7 @@ static void MemManage_Handler_C(uint32_t *frame) {
 
   /* Halt the system - safer than attempting partition recovery from fault
    * handler */
+  __disable_irq(); /* Prevent livelock or nested faults */
   while (1) {
     __asm volatile("wfi");
   }
@@ -233,6 +235,7 @@ static void BusFault_Handler_C(uint32_t *frame) {
 #ifdef POK_NEEDS_DEBUG
   fault_puts("FATAL: Bus fault recovery disabled - System halted for safety\n");
 #endif
+  __disable_irq(); /* Prevent livelock or nested faults */
   while (1) {
     __asm volatile("wfi");
   }
@@ -278,6 +281,7 @@ static void UsageFault_Handler_C(uint32_t *frame) {
   fault_put_dec(partition_id);
   fault_puts(" - System halted for safety\n");
 #endif
+  __disable_irq(); /* Prevent livelock or nested faults */
   while (1) {
     __asm volatile("wfi");
   }
@@ -331,6 +335,7 @@ static void HardFault_Handler_C(uint32_t *frame) {
   fault_puts(
       "FATAL: Hard fault recovery disabled - System halted for safety\n");
 #endif
+  __disable_irq(); /* Prevent livelock or nested faults */
   while (1) {
     __asm volatile("wfi");
   }

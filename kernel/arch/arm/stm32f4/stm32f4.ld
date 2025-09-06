@@ -88,8 +88,14 @@ SECTIONS
   } >SRAM
 
   /* Stack section: absorb input .stack from startup.S and allocate space after BSS
-   * Note: This places stack mid-SRAM rather than at top, which limits heap
-   * growth but ensures compatibility with startup.S __StackTop definition.
+   *
+   * CURRENT DESIGN TRADEOFF:
+   * - Places stack mid-SRAM (after BSS) instead of top-of-SRAM
+   * - RISKS: Heap/stack contention as heap grows upward from _end
+   * - BENEFIT: Maintains compatibility with startup.S __StackTop definition
+   *
+   * FUTURE IMPROVEMENT: Move stack to top-of-SRAM and update startup.S
+   * to use linker-provided stack location for optimal memory layout.
    * The 4KB stack grows downward from _estack. NOLOAD prevents duplicate allocation. */
   .stack (NOLOAD) :
   {

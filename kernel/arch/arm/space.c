@@ -99,45 +99,6 @@ pok_ret_t pok_create_space(uint8_t partition_id, uint32_t addr, uint32_t size) {
   /* Align size to power of 2 (MPU requirement) */
   uint32_t aligned_size = mpu_align_size_to_power_of_2(size);
 
-  /* Security fix: handle exposed memory due to MPU alignment
-   * IMPORTANT: We can only clear memory within declared partition bounds.
-   * Memory beyond (addr + size) is not guaranteed to be owned by this
-   * partition.
-   */
-  uint32_t exposed_memory = aligned_size - size;
-  if (exposed_memory > 0) {
-    /* Check if memory waste exceeds critical threshold */
-    uint32_t waste_percent = (exposed_memory * 100) / size;
-    if (waste_percent > MEMORY_WASTE_CRITICAL_PERCENT) {
-#ifdef POK_NEEDS_DEBUG
-      printf("ERROR: Partition %d MPU alignment wastes %u%% memory (%u bytes) "
-             "- exceeds %u%% limit\n",
-             partition_id, waste_percent, exposed_memory,
-             MEMORY_WASTE_CRITICAL_PERCENT);
-#endif
-      return POK_ERRNO_EINVAL;
-    }
-
-    /* WARNING: Do NOT memset beyond declared partition bounds!
-     * The exposed memory (addr + size) to (addr + aligned_size) is not
-     * guaranteed to be allocated to this partition. Clearing it could:
-     * 1. Overwrite other partition data
-     * 2. Cause memory protection faults
-     * 3. Create security vulnerabilities
-     *
-     * The MPU will protect against access to the exposed region, so
-     * we rely on MPU hardware protection rather than clearing.
-     */
-
-#ifdef POK_NEEDS_DEBUG
-    if (waste_percent > MEMORY_WASTE_THRESHOLD_PERCENT) {
-      printf("WARNING: Partition %d MPU alignment wastes %u%% memory (%u "
-             "bytes) - protected by MPU hardware\n",
-             partition_id, waste_percent, exposed_memory);
-    }
-#endif
-  }
-
   /* Validate base address alignment matches MPU requirements */
   if (!mpu_is_aligned(addr, aligned_size)) {
 #ifdef POK_NEEDS_DEBUG
@@ -147,22 +108,52 @@ pok_ret_t pok_create_space(uint8_t partition_id, uint32_t addr, uint32_t size) {
     return POK_ERRNO_EINVAL;
   }
 
-  /* Configure MPU region for partition with subregion support to hide unused
-   * memory */
+  /* Configure MPU region - try subregions first to minimize waste */
+  uint32_t actual_exposed_memory = aligned_size - size;
+  pok_bool_t used_subregions = FALSE;
+
   if (aligned_size >= ARM_MPU_MIN_SUBREGION_SIZE &&
       (aligned_size - size) >= (size / 4)) {
     /* Use subregions if region is large enough and waste is significant */
     if (pok_mpu_configure_region_with_subregions(
-            region_id, addr, size, aligned_size, mpu_attributes) !=
+            region_id, addr, size, aligned_size, mpu_attributes) ==
         POK_ERRNO_OK) {
-      return POK_ERRNO_EFAULT;
+      used_subregions = TRUE;
+      /* With subregions, actual exposed memory is much smaller */
+      actual_exposed_memory = 0; /* Subregions mask unused portions */
     }
-  } else {
-    /* Use standard region configuration for small regions */
+  }
+
+  if (!used_subregions) {
+    /* Use standard region configuration */
     if (pok_mpu_configure_region(region_id, addr, aligned_size,
                                  mpu_attributes) != POK_ERRNO_OK) {
       return POK_ERRNO_EFAULT;
     }
+    /* Standard region exposes full aligned_size - size */
+    actual_exposed_memory = aligned_size - size;
+  }
+
+  /* Check waste after subregion masking */
+  if (actual_exposed_memory > 0) {
+    uint32_t waste_percent = (actual_exposed_memory * 100) / size;
+    if (waste_percent > MEMORY_WASTE_CRITICAL_PERCENT) {
+#ifdef POK_NEEDS_DEBUG
+      printf("ERROR: Partition %d wastes %u%% memory (%u bytes) "
+             "- exceeds %u%% limit\n",
+             partition_id, waste_percent, actual_exposed_memory,
+             MEMORY_WASTE_CRITICAL_PERCENT);
+#endif
+      return POK_ERRNO_EINVAL;
+    }
+
+#ifdef POK_NEEDS_DEBUG
+    if (waste_percent > MEMORY_WASTE_THRESHOLD_PERCENT) {
+      printf("WARNING: Partition %d wastes %u%% memory (%u bytes) "
+             "- protected by MPU hardware\n",
+             partition_id, waste_percent, actual_exposed_memory);
+    }
+#endif
   }
 
   /* Store partition information */
@@ -201,6 +192,15 @@ pok_ret_t pok_create_code_region(uint8_t partition_id, uint32_t code_addr,
     return POK_ERRNO_EINVAL;
   }
 
+  /* Require existing partition before creating code region */
+  if (spaces[partition_id].size == 0) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: Cannot create code region for non-existent partition %d\n",
+           partition_id);
+#endif
+    return POK_ERRNO_EINVAL;
+  }
+
   /* Use partition_id + 1 + POK_CONFIG_NB_PARTITIONS as code region ID */
   region_id = partition_id + 1 + POK_CONFIG_NB_PARTITIONS;
 
@@ -227,6 +227,21 @@ pok_ret_t pok_create_code_region(uint8_t partition_id, uint32_t code_addr,
 #ifdef POK_NEEDS_DEBUG
     printf("ERROR: Code region ID %u exceeds available regions %u\n", region_id,
            available_regions);
+#endif
+    return POK_ERRNO_EINVAL;
+  }
+
+  /* Enforce code region is inside the partition bounds */
+  uint32_t partition_base = spaces[partition_id].phys_base;
+  uint32_t partition_end = partition_base + spaces[partition_id].size;
+  uint32_t code_end = code_addr + code_size;
+
+  if (code_addr < partition_base || code_end > partition_end) {
+#ifdef POK_NEEDS_DEBUG
+    printf(
+        "ERROR: Code region [0x%x-0x%x) outside partition bounds [0x%x-0x%x) "
+        "for partition %d\n",
+        code_addr, code_end, partition_base, partition_end, partition_id);
 #endif
     return POK_ERRNO_EINVAL;
   }
@@ -314,7 +329,6 @@ uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,
                                   uint32_t stack_rel, uint32_t arg1,
                                   uint32_t arg2) {
   context_t *ctx;
-  char *stack_addr;
   uint32_t entry_abs, stack_abs;
 
   if (partition_id >= POK_CONFIG_NB_PARTITIONS) {
@@ -334,31 +348,39 @@ uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,
    * bounds */
   if (spaces[partition_id].mpu_code_region != 0) {
     /* Entry point must be within the code region */
-    uint32_t code_offset = entry_rel - (spaces[partition_id].code_base -
-                                        spaces[partition_id].phys_base);
-    if (entry_rel <
-            (spaces[partition_id].code_base - spaces[partition_id].phys_base) ||
-        code_offset >= spaces[partition_id].code_size) {
+    uint32_t code_region_base =
+        spaces[partition_id].code_base - spaces[partition_id].phys_base;
+
+    /* Avoid unsigned underflow when computing code_offset */
+    if (entry_rel < code_region_base) {
+      /* entry_rel is before code region - invalid */
+#ifdef POK_NEEDS_DEBUG
+      printf("ERROR: Entry offset 0x%x before code region start 0x%x "
+             "in partition %d\n",
+             entry_rel, code_region_base, partition_id);
+#endif
+      return (0);
+    }
+
+    uint32_t code_offset = entry_rel - code_region_base;
+    if (code_offset >= spaces[partition_id].code_size) {
 #ifdef POK_NEEDS_DEBUG
       printf("ERROR: Entry offset 0x%x not within code region bounds "
              "(0x%x-0x%x) in partition %d\n",
-             entry_rel,
-             spaces[partition_id].code_base - spaces[partition_id].phys_base,
-             (spaces[partition_id].code_base - spaces[partition_id].phys_base) +
-                 spaces[partition_id].code_size,
-             partition_id);
+             entry_rel, code_region_base,
+             code_region_base + spaces[partition_id].code_size, partition_id);
 #endif
       return (0);
     }
   } else {
-    /* No separate code region - validate against general partition size */
-    if (entry_rel >= spaces[partition_id].size) {
+    /* W^X consistency: require a code region or execution will HardFault */
 #ifdef POK_NEEDS_DEBUG
-      printf("ERROR: Entry offset 0x%x exceeds partition %d size 0x%x\n",
-             entry_rel, partition_id, spaces[partition_id].size);
+    printf(
+        "ERROR: No code region defined for partition %d - execution will fail "
+        "due to W^X enforcement (data region is non-executable)\n",
+        partition_id);
 #endif
-      return (0);
-    }
+    return (0);
   }
 
   if (stack_rel >= spaces[partition_id].size) {
@@ -391,26 +413,30 @@ uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,
     return (0);
   }
 
-  /* Allocate kernel stack after all validations */
-  stack_addr = pok_bsp_mem_alloc(KERNEL_STACK_SIZE);
-  if (!stack_addr) {
+  /* Create context frame at top of user stack (no kernel stack allocation) */
+  ctx = (context_t *)(sp_aligned - sizeof(context_t));
+
+  /* Validate context frame is still within partition bounds */
+  if ((uint32_t)ctx < base || ((uint32_t)ctx + sizeof(context_t)) > end) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: Context frame outside partition bounds in partition %d\n",
+           partition_id);
+#endif
     return (0);
   }
 
-  /* Set up context at top of kernel stack */
-  ctx = (context_t *)(stack_addr + KERNEL_STACK_SIZE - sizeof(context_t));
+  /* Initialize context frame (zero-initialize first) */
   memset(ctx, 0, sizeof(context_t));
 
-  /* Initialize ARM Cortex-M context */
+  /* Initialize ARM Cortex-M context for thread startup */
   ctx->r0 = arg1;                      /* First argument */
   ctx->r1 = arg2;                      /* Second argument */
-  ctx->sp = sp_aligned;                /* User stack pointer (8-byte aligned) */
   ctx->lr = ARM_EXC_RETURN_THREAD_PSP; /* Return to Thread mode, use PSP */
-  ctx->pc = entry_abs;                 /* Entry point */
+  ctx->pc = entry_abs | 1;             /* Entry point with Thumb bit set */
   ctx->xpsr = 0x01000000;              /* Thumb bit set */
 
 #ifdef POK_NEEDS_DEBUG
-  printf("space_context_create %d: entry=%x stack=%x arg1=%x arg2=%x ksp=%x\n",
+  printf("space_context_create %d: entry=%x stack=%x arg1=%x arg2=%x ctx=%x\n",
          partition_id, entry_abs, stack_abs, arg1, arg2, (uint32_t)ctx);
 #endif
 

@@ -18,10 +18,10 @@
  * \brief   STM32F4 system timer using SysTick
  */
 
+#include "../../../../test_deployment.h"
 #include "../nvic.h"
 #include "clock_config.h"
 #include "peripherals.h"
-#include "test_deployment.h"
 #include <core/sched.h>
 #include <core/time.h>
 #include <errno.h>

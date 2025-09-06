@@ -56,6 +56,12 @@
 #define MPU_SUBREGION_ALIGNMENT 256
 #define MPU_SUBREGION_ALIGNMENT_MASK (MPU_SUBREGION_ALIGNMENT - 1)
 
+/* Compile-time power-of-two checks for alignment assumptions */
+_Static_assert((POK_MEMORY_ALIGNMENT & (POK_MEMORY_ALIGNMENT - 1)) == 0,
+               "POK_MEMORY_ALIGNMENT must be power of 2");
+_Static_assert((MPU_SUBREGION_ALIGNMENT & (MPU_SUBREGION_ALIGNMENT - 1)) == 0,
+               "MPU_SUBREGION_ALIGNMENT must be power of 2");
+
 /* Compile-time guards for memory layout assumptions */
 #if POK_KERNEL_MEMORY_SIZE >= POK_SRAM_SIZE
 #error "POK_KERNEL_MEMORY_SIZE must be smaller than POK_SRAM_SIZE"

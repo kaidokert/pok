@@ -316,7 +316,7 @@ pok_ret_t pok_mpu_disable(void) {
   return POK_ERRNO_OK;
 }
 
-inline uint8_t pok_mpu_get_region_count(void) { return mpu_region_count; }
+uint8_t pok_mpu_get_region_count(void) { return mpu_region_count; }
 
 uint32_t pok_mpu_size_to_rasr(uint32_t size) {
   uint32_t rasr_size = 0;

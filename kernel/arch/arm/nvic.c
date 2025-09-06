@@ -198,10 +198,12 @@ pok_ret_t pok_nvic_set_handler(uint8_t irq, void (*handler)(void)) {
     }
   }
 
-  /* Disable IRQ during handler update to prevent race conditions */
+  /* Disable interrupts during handler update to prevent race conditions */
   uint8_t irq_was_enabled = 0;
+  uint32_t primask_state = 0;
+
   if (irq >= EXCEPTION_IRQ0) {
-    /* Check if external IRQ was enabled */
+    /* External IRQ - disable specific IRQ */
     uint8_t external_irq = irq - EXCEPTION_IRQ0;
     uint32_t reg_idx = external_irq / 32;
     uint32_t bit_pos = external_irq % 32;
@@ -209,6 +211,10 @@ pok_ret_t pok_nvic_set_handler(uint8_t irq, void (*handler)(void)) {
       irq_was_enabled = 1;
       NVIC_ICER[reg_idx] = (1U << bit_pos); /* Disable IRQ */
     }
+  } else if (irq >= 2 && irq <= 15) {
+    /* System exception - disable all interrupts to prevent race */
+    primask_state = __get_PRIMASK();
+    __disable_irq();
   }
 
   /* Set handler in RAM vector table */
@@ -221,12 +227,19 @@ pok_ret_t pok_nvic_set_handler(uint8_t irq, void (*handler)(void)) {
   /* Data Synchronization Barrier to ensure vector table update completes */
   __asm volatile("dsb" : : : "memory");
   __asm volatile("isb");
-  /* Re-enable IRQ if it was enabled before */
-  if (irq_was_enabled) {
-    uint8_t external_irq = irq - EXCEPTION_IRQ0;
-    uint32_t reg_idx = external_irq / 32;
-    uint32_t bit_pos = external_irq % 32;
-    NVIC_ISER[reg_idx] = (1U << bit_pos);
+
+  /* Re-enable interrupts */
+  if (irq >= EXCEPTION_IRQ0) {
+    /* External IRQ - re-enable specific IRQ if it was enabled */
+    if (irq_was_enabled) {
+      uint8_t external_irq = irq - EXCEPTION_IRQ0;
+      uint32_t reg_idx = external_irq / 32;
+      uint32_t bit_pos = external_irq % 32;
+      NVIC_ISER[reg_idx] = (1U << bit_pos);
+    }
+  } else if (irq >= 2 && irq <= 15) {
+    /* System exception - restore global interrupt state */
+    __set_PRIMASK(primask_state);
   }
 
   return POK_ERRNO_OK;

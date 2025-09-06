@@ -21,7 +21,7 @@ partitions:
       threads:
           count: 2
           features: [sleep]
-      size: 24kB
+      size: 32kB
       objects: ["main.o"]
 
 kernel:

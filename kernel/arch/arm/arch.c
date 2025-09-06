@@ -102,7 +102,9 @@ uint32_t pok_thread_stack_addr(const uint8_t partition_id,
 
   /* Check local_thread_id bounds to prevent overflow */
   uint32_t partition_size = pok_partitions[partition_id].size;
-  uint32_t max_threads = partition_size / POK_USER_STACK_SIZE;
+  /* Account for guard bytes in max threads calculation */
+  uint32_t effective_stack_size = POK_USER_STACK_SIZE + POK_STACK_GUARD_BYTES;
+  uint32_t max_threads = partition_size / effective_stack_size;
   if (local_thread_id >= max_threads) {
     return 0; /* Thread ID too large for partition */
   }
