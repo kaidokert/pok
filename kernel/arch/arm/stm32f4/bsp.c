@@ -27,7 +27,15 @@
 /* STM32F4-specific memory configuration overrides */
 #define POK_FLASH_BASE STM32F4_FLASH_BASE
 #define POK_SRAM_BASE STM32F4_SRAM_BASE
-#define POK_SRAM_SIZE 0x20000         /* 128KB */
+
+/* STM32F4 SRAM size - configurable for different MCU variants
+ * STM32F407VG/417VG: 128KB main SRAM + 64KB CCM
+ * STM32F429/439: 256KB main SRAM + 64KB CCM
+ * Override POK_SRAM_SIZE in platform-specific headers if needed */
+#ifndef POK_SRAM_SIZE
+#define POK_SRAM_SIZE 0x20000 /* Default: 128KB for STM32F407/417 */
+#endif
+
 #define POK_KERNEL_MEMORY_SIZE 0x8000 /* 32KB for kernel */
 
 /* Include configurable memory layout */

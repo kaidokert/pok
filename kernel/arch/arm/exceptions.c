@@ -133,8 +133,8 @@ static void MemManage_Handler_C(uint32_t *frame) {
     fault_addr = *((volatile uint32_t *)(SCB_BASE + 0x34)); /* MMFAR */
   }
 
-  /* Clear MemManage fault flags in CFSR */
-  SCB_CFSR = ARM_CFSR_MMFSR_MASK; /* Clear MMFSR bits by writing 1s */
+  /* Clear MemManage fault flags in CFSR - write back only set bits */
+  SCB_CFSR = cfsr & ARM_CFSR_MMFSR_MASK; /* Clear only set MMFSR bits */
 
   /* Get current partition */
   extern uint8_t pok_current_partition;
@@ -201,8 +201,8 @@ static void BusFault_Handler_C(uint32_t *frame) {
     fault_addr = *((volatile uint32_t *)(SCB_BASE + 0x38)); /* BFAR */
   }
 
-  /* Clear Bus fault flags in CFSR */
-  SCB_CFSR = ARM_CFSR_BFSR_MASK; /* Clear BFSR bits by writing 1s */
+  /* Clear Bus fault flags in CFSR - write back only set bits */
+  SCB_CFSR = cfsr & ARM_CFSR_BFSR_MASK; /* Clear only set BFSR bits */
 
   extern uint8_t pok_current_partition;
   partition_id = pok_current_partition;
@@ -256,9 +256,9 @@ static void UsageFault_Handler_C(uint32_t *frame) {
   extern uint8_t pok_current_partition;
   partition_id = pok_current_partition;
 
-  /* Clear Usage fault flags in CFSR */
+  /* Clear Usage fault flags in CFSR - write back only set bits */
   uint32_t cfsr = SCB_CFSR;
-  SCB_CFSR = ARM_CFSR_UFSR_MASK; /* Clear UFSR bits by writing 1s */
+  SCB_CFSR = cfsr & ARM_CFSR_UFSR_MASK; /* Clear only set UFSR bits */
 
 #ifdef POK_NEEDS_DEBUG
   fault_puts("UsageFault in partition ");
@@ -274,7 +274,7 @@ static void UsageFault_Handler_C(uint32_t *frame) {
   /* Halt system immediately - safer than partition recovery from fault context
    */
 #ifdef POK_NEEDS_DEBUG
-  fault_puts("FATAL: Bus fault in partition ");
+  fault_puts("FATAL: Usage fault in partition ");
   fault_put_dec(partition_id);
   fault_puts(" - System halted for safety\n");
 #endif

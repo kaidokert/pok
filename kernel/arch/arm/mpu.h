@@ -78,10 +78,18 @@
 #define MPU_ATTR_EXTERNAL_RAM                                                  \
   (MPU_TEX(1) | MPU_RASR_C |                                                   \
    MPU_RASR_B) /* TEX=001, C=1, B=1 - Normal, Write-back cacheable */
-#define MPU_ATTR_PERIPHERAL                                                    \
-  (MPU_TEX(0)) /* TEX=000, C=0, B=0 - Strongly-ordered */
-#define MPU_ATTR_PERIPHERAL_XN                                                 \
-  (MPU_TEX(0) | MPU_RASR_XN) /* Strongly-ordered + Execute Never */
+
+/* Peripheral Memory Attributes - Platform-specific optimizations */
+#define MPU_ATTR_PERIPHERAL_STRONGLY_ORDERED                                   \
+  (MPU_TEX(0)) /* TEX=000, C=0, B=0 - Strongly-ordered for critical regs */
+#define MPU_ATTR_PERIPHERAL_DEVICE                                             \
+  (MPU_TEX(2)) /* TEX=010, C=0, B=0 - Device memory for normal peripherals */
+#define MPU_ATTR_PERIPHERAL_DEVICE_XN                                          \
+  (MPU_TEX(2) | MPU_RASR_XN) /* Device memory + Execute Never */
+
+/* Legacy compatibility - use device memory for better performance */
+#define MPU_ATTR_PERIPHERAL MPU_ATTR_PERIPHERAL_DEVICE
+#define MPU_ATTR_PERIPHERAL_XN MPU_ATTR_PERIPHERAL_DEVICE_XN
 
 /* Access Permission Helper Macros */
 #define MPU_PERM_NO_ACCESS() MPU_AP_NO_ACCESS
@@ -99,6 +107,15 @@
 #define MPU_CONFIG_USER_STACK                                                  \
   (MPU_ATTR_INTERNAL_SRAM | MPU_PERM_ALL_RW() | MPU_RASR_XN)
 #define MPU_CONFIG_KERNEL_DATA                                                 \
+  (MPU_ATTR_INTERNAL_SRAM | MPU_PERM_PRIV_RW() | MPU_RASR_XN)
+
+/* STM32F4-specific peripheral configurations for different memory access
+ * patterns */
+#define MPU_CONFIG_PERIPHERAL_CRITICAL                                         \
+  (MPU_ATTR_PERIPHERAL_STRONGLY_ORDERED | MPU_PERM_PRIV_RW() | MPU_RASR_XN)
+#define MPU_CONFIG_PERIPHERAL_DEVICE                                           \
+  (MPU_ATTR_PERIPHERAL_DEVICE_XN | MPU_PERM_PRIV_RW())
+#define MPU_CONFIG_CCM_SRAM                                                    \
   (MPU_ATTR_INTERNAL_SRAM | MPU_PERM_PRIV_RW() | MPU_RASR_XN)
 
 /* MPU Size and Validation Helper Macros */

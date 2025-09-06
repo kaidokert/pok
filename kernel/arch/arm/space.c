@@ -276,8 +276,11 @@ pok_ret_t pok_create_code_region(uint8_t partition_id, uint32_t code_addr,
 
 pok_ret_t pok_space_switch(uint8_t old_partition_id, uint8_t new_partition_id) {
   if (old_partition_id < POK_CONFIG_NB_PARTITIONS) {
-    /* Disable old partition's data MPU region */
-    pok_mpu_disable_region(spaces[old_partition_id].mpu_region);
+    /* Disable old partition's data MPU region if valid (avoid affecting kernel
+     * region) */
+    if (spaces[old_partition_id].mpu_region != 0) {
+      pok_mpu_disable_region(spaces[old_partition_id].mpu_region);
+    }
 
     /* Disable old partition's code region if it exists */
     if (spaces[old_partition_id].mpu_code_region != 0) {
@@ -286,8 +289,11 @@ pok_ret_t pok_space_switch(uint8_t old_partition_id, uint8_t new_partition_id) {
   }
 
   if (new_partition_id < POK_CONFIG_NB_PARTITIONS) {
-    /* Enable new partition's data MPU region */
-    pok_mpu_enable_region(spaces[new_partition_id].mpu_region);
+    /* Enable new partition's data MPU region if valid (avoid affecting kernel
+     * region) */
+    if (spaces[new_partition_id].mpu_region != 0) {
+      pok_mpu_enable_region(spaces[new_partition_id].mpu_region);
+    }
 
     /* Enable new partition's code region if it exists (enforces W^X) */
     if (spaces[new_partition_id].mpu_code_region != 0) {
@@ -318,9 +324,8 @@ uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,
   /* ARM Cortex-M is single-core, ignore processor_affinity but validate it */
   (void)processor_affinity; /* Suppress unused parameter warning */
 
-  /* Allocate kernel stack */
-  stack_addr = pok_bsp_mem_alloc(KERNEL_STACK_SIZE);
-  if (!stack_addr) {
+  /* Ensure partition was created */
+  if (spaces[partition_id].size == 0) {
     return (0);
   }
 
@@ -355,16 +360,28 @@ uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,
   entry_abs = spaces[partition_id].phys_base + entry_rel;
   stack_abs = spaces[partition_id].phys_base + stack_rel;
 
+  /* Validate aligned SP is within partition bounds */
+  uint32_t sp_aligned = align_down(stack_abs, STACK_ALIGNMENT_BYTES);
+  uint32_t base = spaces[partition_id].phys_base;
+  uint32_t end = base + spaces[partition_id].size;
+  if (sp_aligned < base || sp_aligned >= end) {
+    return (0);
+  }
+
+  /* Allocate kernel stack after all validations */
+  stack_addr = pok_bsp_mem_alloc(KERNEL_STACK_SIZE);
+  if (!stack_addr) {
+    return (0);
+  }
+
   /* Set up context at top of kernel stack */
   ctx = (context_t *)(stack_addr + KERNEL_STACK_SIZE - sizeof(context_t));
   memset(ctx, 0, sizeof(context_t));
 
   /* Initialize ARM Cortex-M context */
-  ctx->r0 = arg1; /* First argument */
-  ctx->r1 = arg2; /* Second argument */
-  ctx->sp = align_down(stack_abs,
-                       STACK_ALIGNMENT_BYTES); /* User stack pointer (8-byte
-                                                  aligned, within bounds) */
+  ctx->r0 = arg1;                      /* First argument */
+  ctx->r1 = arg2;                      /* Second argument */
+  ctx->sp = sp_aligned;                /* User stack pointer (8-byte aligned) */
   ctx->lr = ARM_EXC_RETURN_THREAD_PSP; /* Return to Thread mode, use PSP */
   ctx->pc = entry_abs;                 /* Entry point */
   ctx->xpsr = 0x01000000;              /* Thumb bit set */

@@ -29,9 +29,9 @@ stack_mem:
 .space  Stack_Size
 .equ    __StackTop, stack_mem + Stack_Size
 
-/* Vector table */
+/* Vector table - must be power-of-two aligned for VTOR */
 .section ".isr_vector", "a"
-.align 2
+.align 9  /* 2^9 = 512 bytes, required for 98-vector table */
 .globl vector_table
 vector_table:
     .word   __StackTop                  /* Initial Stack Pointer */

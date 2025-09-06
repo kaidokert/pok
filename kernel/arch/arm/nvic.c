@@ -128,8 +128,15 @@ pok_ret_t pok_nvic_init(void) {
   pok_nvic_set_priority(EXCEPTION_PENDSV, NVIC_PRIORITY_LOWEST);
   pok_nvic_set_priority(EXCEPTION_SYSTICK, NVIC_PRIORITY_LOWEST);
 
-  /* Clear all pending interrupts */
-  for (int i = 0; i < 8; i++) {
+  /* Clear all pending interrupts based on actual IRQ count
+   * Each ICPR register handles 32 IRQs, so calculate number of registers needed
+   * STM32F4 has 82 external IRQs, requiring 3 ICPR registers (0-2) */
+  const int external_irqs =
+      CORTEX_M_NVIC_VECTOR_COUNT - 16; /* Subtract 16 system vectors */
+  const int icpr_regs_needed =
+      (external_irqs + 31) / 32; /* Round up to next register */
+
+  for (int i = 0; i < icpr_regs_needed; i++) {
     NVIC_ICPR[i] = 0xFFFFFFFF;
   }
 

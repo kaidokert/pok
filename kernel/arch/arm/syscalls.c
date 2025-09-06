@@ -192,10 +192,19 @@ void SysTick_Handler(void) {
  * Initialize system call handling
  */
 pok_ret_t pok_syscall_init(void) {
+  pok_ret_t ret;
+
   /* SVC handler is already set in vector table */
   /* Set up PendSV for context switching */
-  pok_nvic_set_handler(EXCEPTION_PENDSV, PendSV_Handler);
-  pok_nvic_set_priority(EXCEPTION_PENDSV, NVIC_PRIORITY_LOWEST);
+  ret = pok_nvic_set_handler(EXCEPTION_PENDSV, PendSV_Handler);
+  if (ret != POK_ERRNO_OK) {
+    return ret;
+  }
+
+  ret = pok_nvic_set_priority(EXCEPTION_PENDSV, NVIC_PRIORITY_LOWEST);
+  if (ret != POK_ERRNO_OK) {
+    return ret;
+  }
 
   return POK_ERRNO_OK;
 }

@@ -85,10 +85,18 @@ pok_ret_t pok_timer_init(void) {
     return POK_ERRNO_EINVAL;
   }
 
-  /* Validate that actual tick frequency will be reasonable */
+  /* Validate that actual tick frequency will be reasonable - use integer
+   * arithmetic to avoid FP */
   uint32_t actual_freq = SYSTICK_FREQ_HZ / TIMER_RELOAD_VAL;
-  if (actual_freq < TIMER_TICK_HZ * 0.95 ||
-      actual_freq > TIMER_TICK_HZ * 1.05) {
+  /* Check tolerance using cross-multiplication: actual_freq * 100 vs
+   * TIMER_TICK_HZ * [95,105] */
+  int64_t actual_freq_scaled = (int64_t)actual_freq * 100;
+  int64_t target_freq_lower = (int64_t)TIMER_TICK_HZ * 95; /* 95% lower bound */
+  int64_t target_freq_upper =
+      (int64_t)TIMER_TICK_HZ * 105; /* 105% upper bound */
+
+  if (actual_freq_scaled < target_freq_lower ||
+      actual_freq_scaled > target_freq_upper) {
 #ifdef POK_NEEDS_DEBUG
     printf("WARNING: Actual tick frequency %u Hz differs from target %u Hz\n",
            actual_freq, TIMER_TICK_HZ);
