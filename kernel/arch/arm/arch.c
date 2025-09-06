@@ -129,6 +129,15 @@ uint32_t pok_thread_stack_addr(const uint8_t partition_id,
   return stack_addr & ~7;
 }
 
+/**
+ * Trigger a division by zero error for testing or error handling
+ *
+ * This function intentionally causes a division by zero to test UsageFault
+ * handling when DIV_0_TRP is enabled in the SCB Configuration Control Register.
+ * Used for testing exception handling or as a controlled failure mechanism.
+ *
+ * @note This function never returns
+ */
 __attribute__((noreturn)) void pok_division_by_zero_error(void) {
   /* Force a division by zero to trigger UsageFault (when DIV_0_TRP enabled) */
   volatile int zero = 0;

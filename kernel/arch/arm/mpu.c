@@ -278,14 +278,14 @@ pok_ret_t pok_mpu_disable(void) {
   return POK_ERRNO_OK;
 }
 
-inline uint8_t pok_mpu_get_region_count(void) { return (mpu_region_count); }
+inline uint8_t pok_mpu_get_region_count(void) { return mpu_region_count; }
 
 uint32_t pok_mpu_size_to_rasr(uint32_t size) {
   uint32_t rasr_size = 0;
 
   /* Size must be power of 2 and >= minimum size */
   if (size < MPU_MIN_REGION_SIZE || !mpu_is_power_of_2(size)) {
-    return (0); /* Invalid size */
+    return 0; /* Invalid size */
   }
 
   /* Calculate size field (log2(size) - 1) optimized using GCC builtin */

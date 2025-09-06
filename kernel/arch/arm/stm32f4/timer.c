@@ -44,6 +44,8 @@
 
 /* SysTick reload register is 24-bit */
 #define SYSTICK_MAX_RELOAD 0xFFFFFF
+#define SYSTICK_MIN_RELOAD                                                     \
+  100 /* Minimum reasonable reload value for proper timing */
 
 pok_ret_t pok_timer_init(void) {
   /* Enhanced SysTick reload validation for all clock configurations */
@@ -65,10 +67,10 @@ pok_ret_t pok_timer_init(void) {
   }
 
   /* Validate reload value is reasonable (not too small) */
-  if (TIMER_RELOAD_VAL < 100) {
+  if (TIMER_RELOAD_VAL < SYSTICK_MIN_RELOAD) {
 #ifdef POK_NEEDS_DEBUG
-    printf("ERROR: SysTick reload value %u too small (min 100 for stability)\n",
-           TIMER_RELOAD_VAL);
+    printf("ERROR: SysTick reload value %u too small (min %u for stability)\n",
+           TIMER_RELOAD_VAL, SYSTICK_MIN_RELOAD);
     printf("System freq: %u Hz, Tick rate: %u Hz\n", SYSTICK_FREQ_HZ,
            TIMER_TICK_HZ);
 #endif

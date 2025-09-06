@@ -23,6 +23,11 @@
 #include <errno.h>
 #include <libc.h>
 
+/* USART configuration constants */
+#define USART_DEFAULT_BAUD_RATE 115200
+#define USART_OVERSAMPLING_FACTOR 16
+#define USART_ROUNDING_DIVISOR 8 /* For rounding in baud rate calculation */
+
 /* STM32F4 USART1 registers */
 /* USART1_BASE now defined in peripherals.h */
 #define USART1_SR (*((volatile uint32_t *)(USART1_BASE + 0x00)))
@@ -135,7 +140,7 @@ pok_ret_t pok_cons_init(void) {
   /* For oversampling by 16: BRR = (mantissa << 4) + fraction */
   /* USARTDIV = f_CK / (16 * baud_rate) */
   uint32_t apb2_clock = APB2_FREQ_HZ; /* Use correct 84MHz APB2 clock */
-  uint32_t baud_rate = 115200;
+  uint32_t baud_rate = USART_DEFAULT_BAUD_RATE;
 
   /* Bounds checking for baud rate calculation */
   if (baud_rate == 0) {
@@ -143,18 +148,19 @@ pok_ret_t pok_cons_init(void) {
   }
 
   /* Check for potential overflow in calculation */
-  if (apb2_clock > (0xFFFFFFFFU / 16)) {
+  if (apb2_clock > (0xFFFFFFFFU / USART_OVERSAMPLING_FACTOR)) {
     return POK_ERRNO_EINVAL; /* Clock frequency too high for safe calculation */
   }
 
   /* Use 64-bit arithmetic to prevent overflow during computation */
-  uint64_t numerator = ((uint64_t)apb2_clock * 16) + (8 * baud_rate);
-  uint64_t denominator = 16 * baud_rate;
+  uint64_t numerator = ((uint64_t)apb2_clock * USART_OVERSAMPLING_FACTOR) +
+                       (USART_ROUNDING_DIVISOR * baud_rate);
+  uint64_t denominator = USART_OVERSAMPLING_FACTOR * baud_rate;
   uint32_t usartdiv_scaled = (uint32_t)(numerator / denominator);
 
   /* Extract mantissa (integer part) and fraction (4-bit fractional part) */
-  uint32_t mantissa = usartdiv_scaled / 16;
-  uint32_t fraction = usartdiv_scaled % 16;
+  uint32_t mantissa = usartdiv_scaled / USART_OVERSAMPLING_FACTOR;
+  uint32_t fraction = usartdiv_scaled % USART_OVERSAMPLING_FACTOR;
 
   /* Validate that mantissa fits in 12 bits (STM32F4 BRR register limit) */
   if (mantissa > 0xFFF) {
