@@ -49,7 +49,7 @@
 
 /* Memory alignment constants - defined before guards that reference them */
 #define POK_MEMORY_ALIGNMENT 8
-#define POK_MEMORY_ALIGNMENT_MASK 7
+#define POK_MEMORY_ALIGNMENT_MASK (POK_MEMORY_ALIGNMENT - 1)
 
 /* ARM Cortex-M MPU subregion alignment - 256 bytes preferred for optimal region
  * usage */

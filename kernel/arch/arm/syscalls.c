@@ -67,10 +67,24 @@ void SVC_Handler(void) {
   pok_syscall_args_t *syscall_args;
   pok_syscall_id_t syscall_id;
 
-  /* Get the stack frame from PSP */
-  __asm volatile("mrs %0, psp" : "=r"(frame));
+  /* Determine which stack pointer to use based on exception context */
+  uint32_t lr_reg;
+  __asm volatile("mov %0, lr" : "=r"(lr_reg));
+
+  /* Check bit 2 of EXC_RETURN (in LR) to determine stack selection:
+   * 0 = MSP (Main Stack Pointer), 1 = PSP (Process Stack Pointer) */
+  if (lr_reg & (1 << 2)) {
+    /* Exception came from Thread mode using PSP */
+    __asm volatile("mrs %0, psp" : "=r"(frame));
+  } else {
+    /* Exception came from Handler mode or Thread mode using MSP */
+    __asm volatile("mrs %0, msp" : "=r"(frame));
+  }
 
   if (frame == NULL) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: Invalid stack frame in SVC_Handler\n");
+#endif
     return; /* Invalid stack frame */
   }
 

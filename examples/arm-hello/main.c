@@ -41,8 +41,15 @@ void thread2_job(void) {
 }
 
 static inline void setup_thread_attributes(pok_thread_attr_t *attr,
-                                           void *entry) {
-  attr->entry = entry;
+                                           void (*func_ptr)(void)) {
+  /* Use union to avoid undefined behavior of casting function pointer to void*
+   */
+  union {
+    void (*func)(void);
+    void *ptr;
+  } entry_union;
+  entry_union.func = func_ptr;
+  attr->entry = entry_union.ptr;
   attr->priority = 1;
   attr->stack_size = 1024;
   attr->processor_affinity = 0;
@@ -61,7 +68,7 @@ int main(void) {
   printf("====================================\n");
 
   /* Setup first thread attributes */
-  setup_thread_attributes(&attr1, (void *)thread1_job);
+  setup_thread_attributes(&attr1, thread1_job);
 
   /* Create first thread */
   ret = pok_thread_create(&tid1, &attr1);
@@ -71,7 +78,7 @@ int main(void) {
   }
 
   /* Setup second thread attributes */
-  setup_thread_attributes(&attr2, (void *)thread2_job);
+  setup_thread_attributes(&attr2, thread2_job);
 
   /* Create second thread */
   ret = pok_thread_create(&tid2, &attr2);

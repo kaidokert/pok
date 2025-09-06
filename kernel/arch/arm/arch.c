@@ -100,20 +100,33 @@ uint32_t pok_thread_stack_addr(const uint8_t partition_id,
     return 0; /* Invalid partition ID */
   }
 
-  uint32_t stack_offset =
-      local_thread_id * POK_USER_STACK_SIZE + POK_STACK_GUARD_BYTES;
+  /* Check local_thread_id bounds to prevent overflow */
   uint32_t partition_size = pok_partitions[partition_id].size;
+  uint32_t max_threads = partition_size / POK_USER_STACK_SIZE;
+  if (local_thread_id >= max_threads) {
+    return 0; /* Thread ID too large for partition */
+  }
+
+  /* Use 64-bit arithmetic to prevent overflow */
+  uint64_t stack_offset_64 =
+      (uint64_t)local_thread_id * POK_USER_STACK_SIZE + POK_STACK_GUARD_BYTES;
+  if (stack_offset_64 >= partition_size) {
+    return 0; /* Stack offset exceeds partition size */
+  }
+
+  uint32_t stack_offset = (uint32_t)stack_offset_64;
 
   /* Validate that both stack start and end are within partition bounds */
-  if (stack_offset >= partition_size ||
-      (stack_offset + POK_USER_STACK_SIZE) > partition_size) {
-    /* Return an error value or handle gracefully */
+  if ((stack_offset + POK_USER_STACK_SIZE) > partition_size) {
     return 0; /* Invalid stack address - stack extends beyond partition */
   }
 
-  /* Return absolute stack address for consistency with other architectures */
+  /* Calculate and return 8-byte aligned stack address */
   uint32_t partition_base = pok_partitions[partition_id].base_addr;
-  return partition_base + partition_size - stack_offset;
+  uint32_t stack_addr = partition_base + partition_size - stack_offset;
+
+  /* Ensure 8-byte stack pointer alignment for ARM Cortex-M */
+  return stack_addr & ~7;
 }
 
 __attribute__((noreturn)) void pok_division_by_zero_error(void) {

@@ -103,7 +103,17 @@ void *pok_bsp_mem_alloc(size_t size) {
 
   /* Check if we have enough kernel memory remaining - use subtraction to
    * prevent overflow */
-  uint32_t kernel_end = POK_KERNEL_MEMORY_BASE + POK_KERNEL_MEMORY_SIZE;
+  uint32_t kernel_end;
+
+  /* Prevent overflow in kernel_end calculation */
+  if (POK_KERNEL_MEMORY_SIZE > (0xFFFFFFFFU - POK_KERNEL_MEMORY_BASE)) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: Kernel memory configuration would overflow address space\n");
+#endif
+    return (NULL);
+  }
+
+  kernel_end = POK_KERNEL_MEMORY_BASE + POK_KERNEL_MEMORY_SIZE;
 
   /* Additional sanity check: ensure current_alloc_addr is within valid kernel
    * range */

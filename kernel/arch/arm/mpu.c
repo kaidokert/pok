@@ -52,6 +52,11 @@ pok_ret_t pok_mpu_init(void) {
   }
 
   if (mpu_region_count > MPU_MAX_REGIONS) {
+#ifdef POK_NEEDS_DEBUG
+    printf("WARNING: Hardware has %d MPU regions, but POK configured for max "
+           "%d. Truncating to %d regions.\n",
+           mpu_region_count, MPU_MAX_REGIONS, MPU_MAX_REGIONS);
+#endif
     mpu_region_count = MPU_MAX_REGIONS;
   }
 
@@ -107,7 +112,7 @@ pok_ret_t pok_mpu_configure_region(uint8_t region, uint32_t base_addr,
 
   /* Configure base address - ensure base address is properly masked and region
    * is in correct position */
-  MPU_RBAR = (base_addr & ~MPU_RBAR_REGION_MASK) | MPU_RBAR_VALID |
+  MPU_RBAR = (base_addr & MPU_RBAR_ADDR_MASK) | MPU_RBAR_VALID |
              (region & MPU_RBAR_REGION_MASK);
 
   /* Configure attributes and size */
@@ -153,8 +158,8 @@ pok_ret_t pok_mpu_configure_region_with_subregions(uint8_t region,
     return POK_ERRNO_EINVAL;
   }
 
-  /* Ensure base address is aligned to size */
-  if ((base_addr & (aligned_size - 1)) != 0) {
+  /* Ensure base address is aligned to size using consistent helper macro */
+  if (!mpu_is_aligned(base_addr, aligned_size)) {
     return POK_ERRNO_EINVAL;
   }
 
@@ -186,7 +191,7 @@ pok_ret_t pok_mpu_configure_region_with_subregions(uint8_t region,
 
   /* Configure base address - ensure base address is properly masked and region
    * is in correct position */
-  MPU_RBAR = (base_addr & ~MPU_RBAR_REGION_MASK) | MPU_RBAR_VALID |
+  MPU_RBAR = (base_addr & MPU_RBAR_ADDR_MASK) | MPU_RBAR_VALID |
              (region & MPU_RBAR_REGION_MASK);
 
   /* Configure attributes, size, and subregion disable */

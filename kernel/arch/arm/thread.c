@@ -21,6 +21,7 @@
 /* POK system headers */
 #include <errno.h>
 #include <libc.h>
+#include <stddef.h>
 
 /* POK core headers */
 #include <bsp.h>
@@ -104,7 +105,8 @@ uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
     return 0; /* Fail context creation instead of masking error */
   }
 
-  sp->ctx.sp = aligned_sp;
+  /* PSP management is handled externally - context structure only contains
+   * register state */
 
   sp->entry = entry;
   sp->id = thread_id;
@@ -196,7 +198,8 @@ void pok_context_reset(uint32_t stack_size, uint32_t stack_addr) {
     return; /* Cannot safely reset context */
   }
 
-  sp->ctx.sp = aligned_sp;
+  /* PSP management is handled externally - context structure only contains
+   * register state */
 
   sp->entry = entry;
   sp->id = id;
@@ -210,8 +213,13 @@ void pok_arch_thread_start(void) {
   start_context_t *ctx;
   uint32_t entry, thread_id;
 
-  /* Get current context from PSP */
-  __asm volatile("mrs %0, psp" : "=r"(ctx));
+  /* Get current context from PSP - PSP points to &ctx.r4, not to ctx itself */
+  uint32_t psp_value;
+  __asm volatile("mrs %0, psp" : "=r"(psp_value));
+
+  /* Calculate start_context_t pointer: PSP points to r4 field, so subtract
+   * offset */
+  ctx = (start_context_t *)((uint8_t *)psp_value - offsetof(context_t, r4));
 
   /* Extract thread information */
   entry = ctx->entry;

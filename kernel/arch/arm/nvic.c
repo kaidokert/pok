@@ -43,9 +43,18 @@ static uint8_t vector_table_relocated = 0;
 
 /* Default handlers */
 static void pok_nvic_default_handler(void) {
-  /* Default handler - infinite loop */
+  /* Default handler - log error and halt system safely
+   * Avoid WFI as it may create unrecoverable state if no other interrupts occur
+   */
+#ifdef POK_NEEDS_DEBUG
+  printf("FATAL: Unhandled interrupt/exception occurred\n");
+#endif
+
+  /* Disable interrupts and halt */
+  __disable_irq();
   while (1) {
-    __asm volatile("wfi");
+    /* Busy wait instead of WFI to ensure system remains debuggable */
+    __asm volatile("nop");
   }
 }
 
@@ -61,13 +70,26 @@ static pok_ret_t pok_nvic_relocate_vector_table(void) {
    * This makes the code more robust across different memory layouts */
   uint32_t rom_table_addr = SCB_VTOR;
 
-  /* Basic validation of ROM table address (should be in Flash region) */
+  /* Validate ROM table address is in Flash region and properly aligned */
   if (rom_table_addr < STM32F4_FLASH_BASE ||
       rom_table_addr >= (STM32F4_FLASH_BASE + STM32F4_FLASH_SIZE)) {
 #ifdef POK_NEEDS_DEBUG
-    printf("WARNING: ROM vector table at unexpected address: 0x%x\n",
-           rom_table_addr);
+    printf("ERROR: ROM vector table at invalid address: 0x%x (outside Flash "
+           "region 0x%x-0x%x)\n",
+           rom_table_addr, STM32F4_FLASH_BASE,
+           STM32F4_FLASH_BASE + STM32F4_FLASH_SIZE - 1);
 #endif
+    return POK_ERRNO_EINVAL;
+  }
+
+  /* Validate vector table alignment */
+  if ((rom_table_addr & (NVIC_VECTOR_TABLE_ALIGNMENT - 1)) != 0) {
+#ifdef POK_NEEDS_DEBUG
+    printf(
+        "ERROR: ROM vector table misaligned: 0x%x (must be %d-byte aligned)\n",
+        rom_table_addr, NVIC_VECTOR_TABLE_ALIGNMENT);
+#endif
+    return POK_ERRNO_EINVAL;
   }
 
   vector_table_entry_t *rom_vector_table =
@@ -262,8 +284,13 @@ pok_ret_t pok_nvic_set_priority(uint8_t irq, uint8_t priority) {
       return POK_ERRNO_EINVAL;
     }
 
-    /* Ensure offset doesn't exceed register bounds (24 bits max) */
-    if (reg_offset > 24) {
+    /* Validate offset is within 32-bit register and properly aligned for 8-bit
+     * priority field */
+    if (reg_offset > 24 || (reg_offset & 7) != 0) {
+#ifdef POK_NEEDS_DEBUG
+      printf("ERROR: Invalid priority register offset %d for IRQ %d\n",
+             reg_offset, irq);
+#endif
       return POK_ERRNO_EINVAL;
     }
 

@@ -142,8 +142,15 @@ pok_ret_t pok_cons_init(void) {
     return POK_ERRNO_EINVAL; /* Avoid division by zero */
   }
 
-  uint32_t usartdiv_scaled = (apb2_clock * 16 + (8 * baud_rate)) /
-                             (16 * baud_rate); /* USARTDIV * 16 with rounding */
+  /* Check for potential overflow in calculation */
+  if (apb2_clock > (0xFFFFFFFFU / 16)) {
+    return POK_ERRNO_EINVAL; /* Clock frequency too high for safe calculation */
+  }
+
+  /* Use 64-bit arithmetic to prevent overflow during computation */
+  uint64_t numerator = ((uint64_t)apb2_clock * 16) + (8 * baud_rate);
+  uint64_t denominator = 16 * baud_rate;
+  uint32_t usartdiv_scaled = (uint32_t)(numerator / denominator);
 
   /* Extract mantissa (integer part) and fraction (4-bit fractional part) */
   uint32_t mantissa = usartdiv_scaled / 16;
@@ -163,9 +170,9 @@ pok_ret_t pok_cons_init(void) {
   return POK_ERRNO_OK;
 }
 
-pok_ret_t pok_cons_write(const char *s, size_t length) {
+pok_bool_t pok_cons_write(const char *s, size_t length) {
   if (s == NULL) {
-    return POK_ERRNO_EINVAL;
+    return FALSE;
   }
 
   for (size_t i = 0; i < length; i++) {
@@ -178,7 +185,7 @@ pok_ret_t pok_cons_write(const char *s, size_t length) {
 #ifdef POK_NEEDS_DEBUG
       printf("ERROR: UART transmit timeout on character %zu\n", i);
 #endif
-      return POK_ERRNO_EFAULT;
+      return FALSE;
     }
 
     /* Send character */
@@ -197,7 +204,7 @@ pok_ret_t pok_cons_write(const char *s, size_t length) {
     /* Don't return error for final flush timeout, data likely sent */
   }
 
-  return POK_ERRNO_OK;
+  return TRUE;
 }
 
 pok_ret_t pok_cons_read(char *s, size_t length) {

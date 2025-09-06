@@ -37,6 +37,8 @@
 /* MPU Region Base Address Register bits */
 #define MPU_RBAR_VALID (1 << 4)
 #define MPU_RBAR_REGION_MASK 0x0F
+#define MPU_RBAR_ADDR_MASK                                                     \
+  0xFFFFFFE0 /* Mask for base address (clears region + valid bits) */
 
 /* MPU Region Attribute and Size Register bits */
 #define MPU_RASR_ENABLE (1 << 0)

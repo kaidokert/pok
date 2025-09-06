@@ -16,6 +16,12 @@ MEMORY
 /* Stack size definitions */
 _stack_size = 0x1000;  /* 4KB stack - sufficient for ISR nesting, printf, context frames */
 
+/* MSP Placement Note:
+ * Ideally, MSP should be at top of SRAM (0x20000000 + 128K) for optimal memory layout.
+ * However, current design uses mid-SRAM placement to maintain compatibility with
+ * startup.S which defines its own .stack section and __StackTop symbol.
+ * Future enhancement: Modify startup.S to use linker-provided stack location. */
+
 SECTIONS
 {
   /* Vector table goes to flash - must be 0x200 (512) byte aligned for proper VTOR operation */
@@ -81,13 +87,16 @@ SECTIONS
     PROVIDE(end = .);
   } >SRAM
 
-  /* Stack (grows downward from top of SRAM) */
+  /* Stack section: allocates space after BSS for stack
+   * Note: This places stack mid-SRAM rather than at top, which limits heap
+   * growth but ensures compatibility with startup.S __StackTop definition.
+   * The 4KB stack grows downward from _estack. */
   .stack :
   {
     . = ALIGN(8);
     . = . + _stack_size;
     . = ALIGN(8);
-    _estack = .;
+    _estack = .;  /* Stack top for runtime stack operations */
   } >SRAM
 
   /* CCM SRAM section - fast access memory not accessible by DMA

@@ -39,6 +39,12 @@
   512 /* Next power of 2 above vector table size */
 #endif
 
+/* Compile-time check: vector table alignment must be >= vector table size */
+_Static_assert(CORTEX_M_NVIC_VECTOR_TABLE_ALIGNMENT >=
+                   CORTEX_M_NVIC_VECTOR_TABLE_SIZE,
+               "Vector table alignment must be at least as large as the vector "
+               "table size");
+
 /* MPU (Memory Protection Unit) configuration */
 #ifndef CORTEX_M_MPU_MAX_REGIONS
 #define CORTEX_M_MPU_MAX_REGIONS                                               \

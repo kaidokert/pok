@@ -15,6 +15,7 @@
 #ifndef __POK_ARM_THREAD_H__
 #define __POK_ARM_THREAD_H__
 
+#include <stddef.h>
 #include <types.h>
 
 /*
@@ -34,7 +35,7 @@
  * switching CRITICAL: Structure must maintain 8-byte alignment for stack
  * operations while ensuring PendSV register layout compatibility
  */
-typedef struct __attribute__((packed, aligned(8))) {
+typedef struct __attribute__((aligned(8))) {
   /* SOFTWARE-SAVED: PendSV saves these manually (MUST BE FIRST) */
   uint32_t r4;
   uint32_t r5;
@@ -55,9 +56,14 @@ typedef struct __attribute__((packed, aligned(8))) {
   uint32_t pc;   /* Program counter */
   uint32_t xpsr; /* Program status register */
 
-  /* THREAD MANAGEMENT: PSP value managed by context switcher */
-  uint32_t sp; /* Thread Process Stack Pointer (PSP) */
+  /* No PSP field needed - PSP is managed externally by context switcher */
 } context_t;
+
+/* Layout asserts to verify structure integrity */
+_Static_assert(sizeof(context_t) % 8 == 0, "context_t must be 8-byte aligned");
+_Static_assert(offsetof(context_t, r4) == 0, "r4 must be at offset 0");
+_Static_assert(offsetof(context_t, r0) == 8 * 4,
+               "r0 must be at offset 32 (after r4-r11)");
 
 /*
  * Thread startup context structure - also needs proper alignment

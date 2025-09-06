@@ -330,12 +330,35 @@ uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,
   }
 
   /* Bounds validation for entry and stack offsets */
-  if (entry_rel >= spaces[partition_id].size) {
+  /* If partition has a separate code region, validate entry against code region
+   * bounds */
+  if (spaces[partition_id].mpu_code_region != 0) {
+    /* Entry point must be within the code region */
+    uint32_t code_offset = entry_rel - (spaces[partition_id].code_base -
+                                        spaces[partition_id].phys_base);
+    if (entry_rel <
+            (spaces[partition_id].code_base - spaces[partition_id].phys_base) ||
+        code_offset >= spaces[partition_id].code_size) {
 #ifdef POK_NEEDS_DEBUG
-    printf("ERROR: Entry offset 0x%x exceeds partition %d size 0x%x\n",
-           entry_rel, partition_id, spaces[partition_id].size);
+      printf("ERROR: Entry offset 0x%x not within code region bounds "
+             "(0x%x-0x%x) in partition %d\n",
+             entry_rel,
+             spaces[partition_id].code_base - spaces[partition_id].phys_base,
+             (spaces[partition_id].code_base - spaces[partition_id].phys_base) +
+                 spaces[partition_id].code_size,
+             partition_id);
 #endif
-    return (0);
+      return (0);
+    }
+  } else {
+    /* No separate code region - validate against general partition size */
+    if (entry_rel >= spaces[partition_id].size) {
+#ifdef POK_NEEDS_DEBUG
+      printf("ERROR: Entry offset 0x%x exceeds partition %d size 0x%x\n",
+             entry_rel, partition_id, spaces[partition_id].size);
+#endif
+      return (0);
+    }
   }
 
   if (stack_rel >= spaces[partition_id].size) {
