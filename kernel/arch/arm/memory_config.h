@@ -47,6 +47,15 @@
 #define POK_USER_MEMORY_BASE (POK_SRAM_BASE + POK_KERNEL_MEMORY_SIZE)
 #define POK_USER_MEMORY_SIZE (POK_SRAM_SIZE - POK_KERNEL_MEMORY_SIZE)
 
+/* Memory alignment constants - defined before guards that reference them */
+#define POK_MEMORY_ALIGNMENT 8
+#define POK_MEMORY_ALIGNMENT_MASK 7
+
+/* ARM Cortex-M MPU subregion alignment - 256 bytes preferred for optimal region
+ * usage */
+#define MPU_SUBREGION_ALIGNMENT 256
+#define MPU_SUBREGION_ALIGNMENT_MASK (MPU_SUBREGION_ALIGNMENT - 1)
+
 /* Compile-time guards for memory layout assumptions */
 #if POK_KERNEL_MEMORY_SIZE >= POK_SRAM_SIZE
 #error "POK_KERNEL_MEMORY_SIZE must be smaller than POK_SRAM_SIZE"
@@ -77,20 +86,12 @@
 #error "Insufficient user memory - need at least 4KB for partitions"
 #endif
 
-/* MPU subregion alignment warning - kernel size should align for optimal MPU
- * usage */
+/* MPU subregion alignment warning - kernel size should align for efficient
+ * Cortex-M MPU usage */
 #if (POK_KERNEL_MEMORY_SIZE & MPU_SUBREGION_ALIGNMENT_MASK) != 0
 #warning                                                                       \
-    "POK_KERNEL_MEMORY_SIZE not aligned to MPU subregion boundary (32 bytes) - may reduce MPU efficiency"
+    "POK_KERNEL_MEMORY_SIZE not aligned to MPU subregion boundary (256 bytes) - may reduce Cortex-M MPU efficiency"
 #endif
-
-/* Memory alignment constants */
-#define POK_MEMORY_ALIGNMENT 8
-#define POK_MEMORY_ALIGNMENT_MASK 7
-
-/* ARM MPU subregion alignment - minimum 32 bytes for granular protection */
-#define MPU_SUBREGION_SIZE 32
-#define MPU_SUBREGION_ALIGNMENT_MASK (MPU_SUBREGION_SIZE - 1)
 
 /* Kernel region size for MPU configuration */
 #ifndef POK_KERNEL_REGION_SIZE

@@ -137,7 +137,7 @@ pok_ret_t pok_nvic_init(void) {
       (external_irqs + 31) / 32; /* Round up to next register */
 
   for (int i = 0; i < icpr_regs_needed; i++) {
-    NVIC_ICPR[i] = 0xFFFFFFFF;
+    NVIC_ICPR[i] = 0xFFFFFFFFU;
   }
 
   return POK_ERRNO_OK;
@@ -169,9 +169,9 @@ pok_ret_t pok_nvic_set_handler(uint8_t irq, void (*handler)(void)) {
     uint8_t external_irq = irq - EXCEPTION_IRQ0;
     uint32_t reg_idx = external_irq / 32;
     uint32_t bit_pos = external_irq % 32;
-    if (NVIC_ISER[reg_idx] & (1 << bit_pos)) {
+    if (NVIC_ISER[reg_idx] & (1U << bit_pos)) {
       irq_was_enabled = 1;
-      NVIC_ICER[reg_idx] = (1 << bit_pos); /* Disable IRQ */
+      NVIC_ICER[reg_idx] = (1U << bit_pos); /* Disable IRQ */
     }
   }
 
@@ -190,7 +190,7 @@ pok_ret_t pok_nvic_set_handler(uint8_t irq, void (*handler)(void)) {
     uint8_t external_irq = irq - EXCEPTION_IRQ0;
     uint32_t reg_idx = external_irq / 32;
     uint32_t bit_pos = external_irq % 32;
-    NVIC_ISER[reg_idx] = (1 << bit_pos);
+    NVIC_ISER[reg_idx] = (1U << bit_pos);
   }
 
   return POK_ERRNO_OK;
@@ -205,7 +205,7 @@ pok_ret_t pok_nvic_enable_irq(uint8_t irq) {
   uint32_t reg_idx = external_irq / 32;
   uint32_t bit_pos = external_irq % 32;
 
-  NVIC_ISER[reg_idx] = (1 << bit_pos);
+  NVIC_ISER[reg_idx] = (1U << bit_pos);
 
   /* Data Synchronization Barrier to ensure register write completes */
   __asm volatile("dsb" : : : "memory");
@@ -222,7 +222,7 @@ pok_ret_t pok_nvic_disable_irq(uint8_t irq) {
   uint32_t reg_idx = external_irq / 32;
   uint32_t bit_pos = external_irq % 32;
 
-  NVIC_ICER[reg_idx] = (1 << bit_pos);
+  NVIC_ICER[reg_idx] = (1U << bit_pos);
 
   /* Data Synchronization Barrier to ensure register write completes */
   __asm volatile("dsb" : : : "memory");
@@ -290,7 +290,7 @@ pok_ret_t pok_nvic_clear_pending(uint8_t irq) {
   uint32_t reg_idx = external_irq / 32;
   uint32_t bit_pos = external_irq % 32;
 
-  NVIC_ICPR[reg_idx] = (1 << bit_pos);
+  NVIC_ICPR[reg_idx] = (1U << bit_pos);
 
   return POK_ERRNO_OK;
 }
