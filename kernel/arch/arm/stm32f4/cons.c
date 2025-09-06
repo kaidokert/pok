@@ -22,6 +22,7 @@
 #include "peripherals.h"
 #include <errno.h>
 #include <libc.h>
+#include <types.h> /* For pok_ret_t, pok_bool_t, uint32_t, uint64_t */
 
 /* USART configuration constants */
 #define USART_DEFAULT_BAUD_RATE 115200
@@ -236,4 +237,23 @@ pok_ret_t pok_cons_read(char *s, size_t length) {
   }
 
   return POK_ERRNO_OK;
+}
+
+/**
+ * Get a single character from console (blocking)
+ *
+ * @param c Pointer to store the received character
+ */
+void pok_cons_get_char(char *c) {
+  if (c == NULL) {
+    return;
+  }
+
+  /* Wait for receive data register to have data */
+  while (!(USART1_SR & USART_SR_RXNE)) {
+    /* Busy wait - no timeout for single char read */
+  }
+
+  /* Read character */
+  *c = (char)(USART1_DR & 0xFF);
 }

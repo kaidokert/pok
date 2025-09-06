@@ -107,6 +107,17 @@ pok_ret_t pok_mpu_configure_region(uint8_t region, uint32_t base_addr,
     return POK_ERRNO_EINVAL;
   }
 
+  /* Configure attributes and size before disabling interrupts */
+  uint32_t size_field = pok_mpu_size_to_rasr(size);
+  if (size_field == 0) {
+    return POK_ERRNO_EINVAL;
+  }
+  rasr = size_field | attributes | MPU_RASR_ENABLE;
+
+  /* Make MPU region programming atomic w.r.t. interrupts */
+  uint32_t primask = __get_PRIMASK();
+  __disable_irq();
+
   /* Select region */
   MPU_RNR = region;
 
@@ -116,12 +127,13 @@ pok_ret_t pok_mpu_configure_region(uint8_t region, uint32_t base_addr,
              (region & MPU_RBAR_REGION_MASK);
 
   /* Configure attributes and size */
-  uint32_t size_field = pok_mpu_size_to_rasr(size);
-  if (size_field == 0) {
-    return POK_ERRNO_EINVAL;
-  }
-  rasr = size_field | attributes | MPU_RASR_ENABLE;
   MPU_RASR = rasr;
+
+  /* Data Synchronization Barrier */
+  __asm volatile("dsb" : : : "memory");
+
+  /* Restore interrupt state */
+  __set_PRIMASK(primask);
 
   /* Store configuration */
   mpu_regions[region].base_addr = base_addr;
@@ -129,9 +141,6 @@ pok_ret_t pok_mpu_configure_region(uint8_t region, uint32_t base_addr,
   mpu_regions[region].attributes = attributes;
   mpu_regions[region].region_id = region;
   mpu_regions[region].enabled = 1;
-
-  /* Data Synchronization Barrier */
-  __asm volatile("dsb" : : : "memory");
 
   return POK_ERRNO_OK;
 }
@@ -155,6 +164,24 @@ pok_ret_t pok_mpu_configure_region_with_subregions(uint8_t region,
   uint8_t subregion_disable = 0;
 
   if (region >= mpu_region_count) {
+    return POK_ERRNO_EINVAL;
+  }
+
+  /* Validate aligned_size is a valid MPU size */
+  if (!MPU_IS_VALID_SIZE(aligned_size)) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: MPU aligned_size %u is not power-of-2 or below minimum\n",
+           aligned_size);
+#endif
+    return POK_ERRNO_EINVAL;
+  }
+
+  /* Validate actual_size bounds */
+  if (actual_size == 0 || actual_size > aligned_size) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: MPU actual_size %u must be > 0 and <= aligned_size %u\n",
+           actual_size, aligned_size);
+#endif
     return POK_ERRNO_EINVAL;
   }
 
@@ -186,6 +213,18 @@ pok_ret_t pok_mpu_configure_region_with_subregions(uint8_t region,
 #endif
   }
 
+  /* Validate size before disabling interrupts */
+  uint32_t size_field = pok_mpu_size_to_rasr(aligned_size);
+  if (size_field == 0) {
+    return POK_ERRNO_EINVAL;
+  }
+  rasr = size_field | attributes | (subregion_disable << MPU_RASR_SRD_SHIFT) |
+         MPU_RASR_ENABLE;
+
+  /* Make MPU region programming atomic w.r.t. interrupts */
+  uint32_t primask = __get_PRIMASK();
+  __disable_irq();
+
   /* Select region */
   MPU_RNR = region;
 
@@ -195,13 +234,13 @@ pok_ret_t pok_mpu_configure_region_with_subregions(uint8_t region,
              (region & MPU_RBAR_REGION_MASK);
 
   /* Configure attributes, size, and subregion disable */
-  uint32_t size_field = pok_mpu_size_to_rasr(aligned_size);
-  if (size_field == 0) {
-    return POK_ERRNO_EINVAL;
-  }
-  rasr = size_field | attributes | (subregion_disable << MPU_RASR_SRD_SHIFT) |
-         MPU_RASR_ENABLE;
   MPU_RASR = rasr;
+
+  /* Data Synchronization Barrier */
+  __asm volatile("dsb" : : : "memory");
+
+  /* Restore interrupt state */
+  __set_PRIMASK(primask);
 
   /* Store configuration */
   mpu_regions[region].base_addr = base_addr;
@@ -209,9 +248,6 @@ pok_ret_t pok_mpu_configure_region_with_subregions(uint8_t region,
   mpu_regions[region].attributes = attributes;
   mpu_regions[region].region_id = region;
   mpu_regions[region].enabled = 1;
-
-  /* Data Synchronization Barrier */
-  __asm volatile("dsb" : : : "memory");
 
   return POK_ERRNO_OK;
 }
@@ -230,6 +266,7 @@ pok_ret_t pok_mpu_enable_region(uint8_t region) {
     mpu_regions[region].enabled = 1;
 
     __asm volatile("dsb" : : : "memory");
+    __asm volatile("isb" : : : "memory");
 
     __set_PRIMASK(primask);
   }
@@ -250,6 +287,7 @@ pok_ret_t pok_mpu_disable_region(uint8_t region) {
   mpu_regions[region].enabled = 0;
 
   __asm volatile("dsb" : : : "memory");
+  __asm volatile("isb" : : : "memory");
 
   __set_PRIMASK(primask);
 

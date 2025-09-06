@@ -70,7 +70,7 @@ static pok_ret_t pok_nvic_relocate_vector_table(void) {
    * This makes the code more robust across different memory layouts */
   uint32_t rom_table_addr = SCB_VTOR;
 
-  /* Validate ROM table address is in Flash region and properly aligned */
+  /* Validate ROM table address is in Flash region and entire table fits */
   if (rom_table_addr < STM32F4_FLASH_BASE ||
       rom_table_addr >= (STM32F4_FLASH_BASE + STM32F4_FLASH_SIZE)) {
 #ifdef POK_NEEDS_DEBUG
@@ -78,6 +78,20 @@ static pok_ret_t pok_nvic_relocate_vector_table(void) {
            "region 0x%x-0x%x)\n",
            rom_table_addr, STM32F4_FLASH_BASE,
            STM32F4_FLASH_BASE + STM32F4_FLASH_SIZE - 1);
+#endif
+    return POK_ERRNO_EINVAL;
+  }
+
+  /* Ensure full vector table fits in Flash using overflow-safe math */
+  uint32_t flash_end = STM32F4_FLASH_BASE + STM32F4_FLASH_SIZE;
+  uint32_t table_end = rom_table_addr + NVIC_VECTOR_TABLE_SIZE;
+
+  /* Check for overflow in table_end calculation */
+  if (table_end < rom_table_addr || table_end > flash_end) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: ROM vector table (0x%x + %u bytes) extends beyond Flash "
+           "region (end: 0x%x)\n",
+           rom_table_addr, NVIC_VECTOR_TABLE_SIZE, flash_end);
 #endif
     return POK_ERRNO_EINVAL;
   }

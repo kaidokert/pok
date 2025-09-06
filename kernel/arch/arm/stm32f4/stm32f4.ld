@@ -87,13 +87,14 @@ SECTIONS
     PROVIDE(end = .);
   } >SRAM
 
-  /* Stack section: allocates space after BSS for stack
+  /* Stack section: absorb input .stack from startup.S and allocate space after BSS
    * Note: This places stack mid-SRAM rather than at top, which limits heap
    * growth but ensures compatibility with startup.S __StackTop definition.
-   * The 4KB stack grows downward from _estack. */
-  .stack :
+   * The 4KB stack grows downward from _estack. NOLOAD prevents duplicate allocation. */
+  .stack (NOLOAD) :
   {
     . = ALIGN(8);
+    *(.stack)       /* Absorb .stack section from startup.S to prevent orphan */
     . = . + _stack_size;
     . = ALIGN(8);
     _estack = .;  /* Stack top for runtime stack operations */

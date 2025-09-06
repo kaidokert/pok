@@ -217,9 +217,10 @@ void pok_arch_thread_start(void) {
   uint32_t psp_value;
   __asm volatile("mrs %0, psp" : "=r"(psp_value));
 
-  /* Calculate start_context_t pointer: PSP points to r4 field, so subtract
-   * offset */
-  ctx = (start_context_t *)((uint8_t *)psp_value - offsetof(context_t, r4));
+  /* Calculate start_context_t pointer: PSP points at entry field after hardware
+   * frame The entry field is immediately after the context_t structure */
+  ctx = (start_context_t *)((uint8_t *)psp_value -
+                            offsetof(start_context_t, entry));
 
   /* Extract thread information */
   entry = ctx->entry;
