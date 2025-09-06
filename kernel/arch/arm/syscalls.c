@@ -101,10 +101,10 @@ void SVC_Handler(void) {
 
   /*
    * Get syscall arguments from registers
-   * r0 = syscall_id, r1 = syscall_args pointer
+   * r0 = syscall_id, r1 = syscall_args pointer (user virtual address)
    */
-  syscall_id = (pok_syscall_id_t)frame[0];         /* r0 */
-  syscall_args = (pok_syscall_args_t *)(frame[1]); /* r1 */
+  syscall_id = (pok_syscall_id_t)frame[0]; /* r0 */
+
   /*
    * Validate that the arguments pointer is within partition bounds
    */
@@ -113,6 +113,15 @@ void SVC_Handler(void) {
     syscall_ret = POK_ERRNO_EINVAL;
     goto syscall_exit;
   }
+
+  /*
+   * Translate user virtual address to kernel address space
+   * user_vaddr -> kernel_addr = user_vaddr + (base_addr - base_vaddr)
+   */
+  uint32_t user_vaddr = frame[1]; /* r1 - user virtual address */
+  uint32_t kernel_offset = pok_partitions[syscall_info.partition].base_addr -
+                           pok_partitions[syscall_info.partition].base_vaddr;
+  syscall_args = (pok_syscall_args_t *)(user_vaddr + kernel_offset);
 
   /*
    * Execute the system call

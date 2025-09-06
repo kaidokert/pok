@@ -30,7 +30,11 @@
  * 5. msr psp, r0              <- Set PSP to point after r4-r11
  * 6. Hardware pops r0-r3,r12,lr,pc,xpsr from PSP stack on return
  */
-typedef struct __attribute__((packed)) {
+/* ARM Cortex-M context structure with proper alignment for PendSV context
+ * switching CRITICAL: Structure must maintain 8-byte alignment for stack
+ * operations while ensuring PendSV register layout compatibility
+ */
+typedef struct __attribute__((packed, aligned(8))) {
   /* SOFTWARE-SAVED: PendSV saves these manually (MUST BE FIRST) */
   uint32_t r4;
   uint32_t r5;
@@ -56,9 +60,9 @@ typedef struct __attribute__((packed)) {
 } context_t;
 
 /*
- * Thread startup context structure
+ * Thread startup context structure - also needs proper alignment
  */
-typedef struct {
+typedef struct __attribute__((aligned(8))) {
   context_t ctx;
   uint32_t entry; /* Thread entry point */
   uint32_t id;    /* Thread ID */
@@ -68,7 +72,7 @@ typedef struct {
 uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
                             uintptr_t entry);
 void pok_context_switch(uint32_t *old_sp, uint32_t new_sp);
-void pok_context_reset(uint32_t stack_size, uintptr_t stack_addr);
+void pok_context_reset(uint32_t stack_size, uint32_t stack_addr);
 void pok_arch_thread_start(void);
 
 #endif /* !__POK_ARM_THREAD_H__ */

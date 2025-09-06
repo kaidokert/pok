@@ -169,17 +169,32 @@ pok_ret_t pok_cons_write(const char *s, size_t length) {
   }
 
   for (size_t i = 0; i < length; i++) {
-    /* Wait for transmit data register to be empty */
-    while (!(USART1_SR & USART_SR_TXE)) {
-      /* Wait */
+    /* Wait for transmit data register to be empty with timeout protection */
+    uint32_t timeout = 10000; /* Timeout counter */
+    while (!(USART1_SR & USART_SR_TXE) && timeout > 0) {
+      timeout--;
+    }
+    if (timeout == 0) {
+#ifdef POK_NEEDS_DEBUG
+      printf("ERROR: UART transmit timeout on character %zu\n", i);
+#endif
+      return POK_ERRNO_EFAULT;
     }
 
     /* Send character */
     USART1_DR = (uint8_t)s[i];
   }
 
-  /* Wait for transmission complete (optional flush) */
-  while (!(USART1_SR & USART_SR_TC)) { /* wait */
+  /* Wait for transmission complete with timeout protection */
+  uint32_t timeout = 10000; /* Timeout counter */
+  while (!(USART1_SR & USART_SR_TC) && timeout > 0) {
+    timeout--;
+  }
+  if (timeout == 0) {
+#ifdef POK_NEEDS_DEBUG
+    printf("WARNING: UART transmission complete timeout\n");
+#endif
+    /* Don't return error for final flush timeout, data likely sent */
   }
 
   return POK_ERRNO_OK;
@@ -191,9 +206,16 @@ pok_ret_t pok_cons_read(char *s, size_t length) {
   }
 
   for (size_t i = 0; i < length; i++) {
-    /* Wait for receive data register to have data */
-    while (!(USART1_SR & USART_SR_RXNE)) {
-      /* Wait */
+    /* Wait for receive data register to have data with timeout protection */
+    uint32_t timeout = 100000; /* Longer timeout for receive operations */
+    while (!(USART1_SR & USART_SR_RXNE) && timeout > 0) {
+      timeout--;
+    }
+    if (timeout == 0) {
+#ifdef POK_NEEDS_DEBUG
+      printf("ERROR: UART receive timeout on character %zu\n", i);
+#endif
+      return POK_ERRNO_EFAULT;
     }
 
     /* Read character */

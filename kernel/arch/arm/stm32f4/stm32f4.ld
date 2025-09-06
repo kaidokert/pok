@@ -74,6 +74,11 @@ SECTIONS
     *(COMMON)
     . = ALIGN(8);
     _ebss = .;
+
+    /* FIXED: Heap base should be after BSS in SRAM, not in CCMSRAM
+     * This ensures heap is DMA-accessible and in contiguous SRAM */
+    _end = .;
+    PROVIDE(end = .);
   } >SRAM
 
   /* Stack (grows downward from top of SRAM) */
@@ -85,7 +90,9 @@ SECTIONS
     _estack = .;
   } >SRAM
 
-  /* CCM SRAM section - fast access memory not accessible by DMA */
+  /* CCM SRAM section - fast access memory not accessible by DMA
+   * Note: CCMSRAM should NOT contain heap as it's not DMA-accessible
+   * and would cause issues with memory allocators expecting contiguous SRAM */
   .ccmsram (NOLOAD) :
   {
     . = ALIGN(8);
@@ -95,10 +102,6 @@ SECTIONS
     . = ALIGN(8);
     _eccmsram = .;
   } >CCMSRAM
-
-  /* Heap (optional, after BSS) */
-  _end = .;
-  PROVIDE(end = .);
 
   /* Remove specific debugging sections instead of entire libraries */
   /DISCARD/ :

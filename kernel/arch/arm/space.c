@@ -75,6 +75,11 @@ pok_ret_t pok_create_space(uint8_t partition_id, uint32_t addr, uint32_t size) {
     return POK_ERRNO_EINVAL;
   }
 
+  /* Validate nonzero/valid size early to prevent division by zero */
+  if (size == 0) {
+    return POK_ERRNO_EINVAL; /* Zero size is invalid */
+  }
+
   /* Use partition_id + 1 as region ID (reserve region 0 for kernel) */
   region_id = partition_id + 1;
 
@@ -94,7 +99,11 @@ pok_ret_t pok_create_space(uint8_t partition_id, uint32_t addr, uint32_t size) {
   /* Align size to power of 2 (MPU requirement) */
   uint32_t aligned_size = mpu_align_size_to_power_of_2(size);
 
-  /* Security fix: clear exposed memory due to MPU alignment */
+  /* Security fix: handle exposed memory due to MPU alignment
+   * IMPORTANT: We can only clear memory within declared partition bounds.
+   * Memory beyond (addr + size) is not guaranteed to be owned by this
+   * partition.
+   */
   uint32_t exposed_memory = aligned_size - size;
   if (exposed_memory > 0) {
     /* Check if memory waste exceeds critical threshold */
@@ -109,14 +118,21 @@ pok_ret_t pok_create_space(uint8_t partition_id, uint32_t addr, uint32_t size) {
       return POK_ERRNO_EINVAL;
     }
 
-    /* Clear exposed memory to prevent information disclosure */
-    void *exposed_start = (void *)(addr + size);
-    memset(exposed_start, 0, exposed_memory);
+    /* WARNING: Do NOT memset beyond declared partition bounds!
+     * The exposed memory (addr + size) to (addr + aligned_size) is not
+     * guaranteed to be allocated to this partition. Clearing it could:
+     * 1. Overwrite other partition data
+     * 2. Cause memory protection faults
+     * 3. Create security vulnerabilities
+     *
+     * The MPU will protect against access to the exposed region, so
+     * we rely on MPU hardware protection rather than clearing.
+     */
 
 #ifdef POK_NEEDS_DEBUG
     if (waste_percent > MEMORY_WASTE_THRESHOLD_PERCENT) {
       printf("WARNING: Partition %d MPU alignment wastes %u%% memory (%u "
-             "bytes) - cleared for security\n",
+             "bytes) - protected by MPU hardware\n",
              partition_id, waste_percent, exposed_memory);
     }
 #endif
@@ -188,7 +204,30 @@ pok_ret_t pok_create_code_region(uint8_t partition_id, uint32_t code_addr,
   /* Use partition_id + 1 + POK_CONFIG_NB_PARTITIONS as code region ID */
   region_id = partition_id + 1 + POK_CONFIG_NB_PARTITIONS;
 
-  if (region_id >= pok_mpu_get_region_count()) {
+  /* Region budget check: Ensure we don't exceed available MPU regions
+   * Budget allocation:
+   * - Region 0: Reserved for kernel
+   * - Regions 1 to POK_CONFIG_NB_PARTITIONS: Partition data regions
+   * - Regions (POK_CONFIG_NB_PARTITIONS+1) to (2*POK_CONFIG_NB_PARTITIONS):
+   * Partition code regions Total needed: 1 + (2 * POK_CONFIG_NB_PARTITIONS)
+   */
+  uint32_t total_regions_needed = 1 + (2 * POK_CONFIG_NB_PARTITIONS);
+  uint32_t available_regions = pok_mpu_get_region_count();
+
+  if (total_regions_needed > available_regions) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: MPU region budget exceeded. Need %u regions, have %u\n",
+           total_regions_needed, available_regions);
+    printf("Reduce POK_CONFIG_NB_PARTITIONS or use MPU with more regions\n");
+#endif
+    return POK_ERRNO_EINVAL;
+  }
+
+  if (region_id >= available_regions) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: Code region ID %u exceeds available regions %u\n", region_id,
+           available_regions);
+#endif
     return POK_ERRNO_EINVAL;
   }
 
@@ -285,7 +324,34 @@ uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,
     return (0);
   }
 
-  /* Calculate absolute addresses */
+  /* Bounds validation for entry and stack offsets */
+  if (entry_rel >= spaces[partition_id].size) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: Entry offset 0x%x exceeds partition %d size 0x%x\n",
+           entry_rel, partition_id, spaces[partition_id].size);
+#endif
+    return (0);
+  }
+
+  if (stack_rel >= spaces[partition_id].size) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: Stack offset 0x%x exceeds partition %d size 0x%x\n",
+           stack_rel, partition_id, spaces[partition_id].size);
+#endif
+    return (0);
+  }
+
+  /* Validate that stack has reasonable space (at least 1KB) */
+  uint32_t remaining_stack_space = spaces[partition_id].size - stack_rel;
+  if (remaining_stack_space < 1024) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: Insufficient stack space %u bytes in partition %d\n",
+           remaining_stack_space, partition_id);
+#endif
+    return (0);
+  }
+
+  /* Calculate absolute addresses after bounds validation */
   entry_abs = spaces[partition_id].phys_base + entry_rel;
   stack_abs = spaces[partition_id].phys_base + stack_rel;
 

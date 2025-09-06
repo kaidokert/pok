@@ -53,6 +53,15 @@ uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
     return (0);
   }
 
+  /* Validate minimum stack size to prevent underflow */
+  if (stack_size < STACK_ALIGNMENT + sizeof(start_context_t)) {
+#ifdef POK_NEEDS_DEBUG
+    printf("Error: stack_size %u too small, minimum required: %u\n", stack_size,
+           (unsigned)(STACK_ALIGNMENT + sizeof(start_context_t)));
+#endif
+    return 0; /* Fail context creation for insufficient stack */
+  }
+
   /* Place context at top of stack */
   sp = (start_context_t *)(stack_addr + stack_size - sizeof(start_context_t));
 
@@ -62,16 +71,37 @@ uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
   sp->ctx.pc = (uint32_t)pok_arch_thread_start; /* Start with thread wrapper */
   sp->ctx.lr = ARM_EXC_RETURN_THREAD_PSP; /* Return to Thread mode, use PSP */
   sp->ctx.xpsr = 0x01000000;              /* Thumb bit set */
-  /* Ensure 8-byte aligned stack pointer */
-  uint32_t aligned_sp = ((uint32_t)stack_addr + stack_size - STACK_ALIGNMENT) &
-                        ~STACK_ALIGNMENT_MASK;
 
-  /* Check that aligned_sp is within stack bounds */
-  if (aligned_sp < (uint32_t)stack_addr) {
-    /* If out of bounds, set to minimum valid value or handle error */
-    aligned_sp = (uint32_t)stack_addr;
-    /* Optionally, you could log an error or assert here */
-    /* assert(false && "Aligned stack pointer out of bounds"); */
+  /* CRITICAL FIX: PSP must point ABOVE the saved context frame
+   * For ARM Cortex-M exception return, PSP points to where stack will be
+   * after hardware pops the exception frame (r0-r3,r12,lr,pc,xpsr).
+   *
+   * Stack layout (high to low address):
+   * [stack_addr + stack_size] <- stack top
+   * [...user stack space...]
+   * [hardware frame: xpsr,pc,lr,r12,r3,r2,r1,r0] <- 8 words (32 bytes)
+   * [software frame: r11,r10,r9,r8,r7,r6,r5,r4] <- 8 words (32 bytes)
+   * [start_context_t] <- our context structure
+   *
+   * PSP should point above hardware frame so exception return works correctly
+   */
+  uint32_t initial_psp =
+      (uint32_t)&sp->ctx.r0; /* Points to start of hardware frame */
+
+  /* Calculate 8-byte aligned user stack pointer above hardware frame */
+  uint32_t aligned_sp =
+      (initial_psp + (8 * sizeof(uint32_t)) + STACK_ALIGNMENT - 1) &
+      ~STACK_ALIGNMENT_MASK;
+
+  /* Verify aligned_sp is within valid stack bounds */
+  if (aligned_sp < (uint32_t)stack_addr ||
+      aligned_sp >= (uint32_t)stack_addr + stack_size) {
+#ifdef POK_NEEDS_DEBUG
+    printf(
+        "Error: aligned stack pointer 0x%08x out of bounds [0x%08x, 0x%08x)\n",
+        aligned_sp, (uint32_t)stack_addr, (uint32_t)stack_addr + stack_size);
+#endif
+    return 0; /* Fail context creation instead of masking error */
   }
 
   sp->ctx.sp = aligned_sp;
@@ -107,8 +137,10 @@ void pok_context_switch(uint32_t *old_sp, uint32_t new_sp) {
   /* Ensure memory operations complete before triggering PendSV */
   __asm volatile("dsb" ::: "memory");
 
-  /* Trigger PendSV exception to perform context switch */
-  SCB_ICSR = SCB_ICSR_PENDSVSET;
+  /* Trigger PendSV exception to perform context switch
+   * Use |= to avoid clobbering other ICSR bits (e.g., other pending exceptions)
+   */
+  SCB_ICSR |= SCB_ICSR_PENDSVSET;
 
   /* Memory barrier to ensure PendSV is triggered */
   __asm volatile("dsb; isb" ::: "memory");
@@ -118,6 +150,16 @@ void pok_context_reset(uint32_t stack_size, uint32_t stack_addr) {
   start_context_t *sp;
   uint32_t id;
   uint32_t entry;
+
+  /* Validate minimum stack size to prevent underflow - same as
+   * pok_context_create */
+  if (stack_size < STACK_ALIGNMENT + sizeof(start_context_t)) {
+#ifdef POK_NEEDS_DEBUG
+    printf("Error: reset stack_size %u too small, minimum required: %u\n",
+           stack_size, (unsigned)(STACK_ALIGNMENT + sizeof(start_context_t)));
+#endif
+    return; /* Cannot safely reset context */
+  }
 
   sp = (start_context_t *)(stack_addr + stack_size - sizeof(start_context_t));
 
@@ -131,9 +173,30 @@ void pok_context_reset(uint32_t stack_size, uint32_t stack_addr) {
   sp->ctx.pc = (uint32_t)pok_arch_thread_start;
   sp->ctx.lr = ARM_EXC_RETURN_THREAD_PSP;
   sp->ctx.xpsr = 0x01000000;
-  /* Ensure 8-byte aligned stack pointer */
-  sp->ctx.sp =
-      ((stack_addr + stack_size - STACK_ALIGNMENT) & ~STACK_ALIGNMENT_MASK);
+
+  /* CRITICAL FIX: Apply same PSP calculation as pok_context_create
+   * PSP must point ABOVE the saved context frame for ARM Cortex-M exception
+   * return
+   */
+  uint32_t initial_psp =
+      (uint32_t)&sp->ctx.r0; /* Points to start of hardware frame */
+
+  /* Calculate 8-byte aligned user stack pointer above hardware frame */
+  uint32_t aligned_sp =
+      (initial_psp + (8 * sizeof(uint32_t)) + STACK_ALIGNMENT - 1) &
+      ~STACK_ALIGNMENT_MASK;
+
+  /* Verify aligned_sp is within valid stack bounds */
+  if (aligned_sp < stack_addr || aligned_sp >= stack_addr + stack_size) {
+#ifdef POK_NEEDS_DEBUG
+    printf("Error: reset aligned stack pointer 0x%08x out of bounds [0x%08x, "
+           "0x%08x)\n",
+           aligned_sp, stack_addr, stack_addr + stack_size);
+#endif
+    return; /* Cannot safely reset context */
+  }
+
+  sp->ctx.sp = aligned_sp;
 
   sp->entry = entry;
   sp->id = id;
@@ -156,4 +219,26 @@ void pok_arch_thread_start(void) {
 
   /* Call POK core thread start function */
   pok_thread_start((void (*)(void))entry, thread_id);
+
+  /* CRITICAL: Handle thread function return to avoid undefined control flow
+   * In safety-critical systems, threads should not return. If a thread
+   * function returns, we must terminate the thread safely rather than
+   * allowing undefined execution to continue.
+   */
+#ifdef POK_NEEDS_DEBUG
+  printf("FATAL: Thread %d returned from entry function - terminating\n",
+         thread_id);
+#endif
+
+  /* Terminate this thread safely - enter infinite WFI loop
+   * This prevents undefined control flow while keeping the system stable.
+   * The scheduler will never schedule this thread again.
+   */
+  __asm volatile("cpsid i"
+                 :
+                 :
+                 : "memory"); /* Disable interrupts for this thread */
+  while (1) {
+    __asm volatile("wfi"); /* Wait for interrupt (low power) */
+  }
 }

@@ -21,6 +21,9 @@
 #ifndef __POK_ARM_ARCH_H__
 #define __POK_ARM_ARCH_H__
 
+/* Required includes for type definitions */
+#include <types.h>
+
 /* ARM Cortex-M Exception Return Values */
 #define ARM_EXC_RETURN_THREAD_PSP                                              \
   0xFFFFFFFDUL /* Return to Thread mode, use PSP */
@@ -46,7 +49,7 @@
 /* SVC Instruction Encoding */
 #define ARM_SVC_NUMBER_MASK 0xFF /* SVC number in lower 8 bits */
 
-/* Priority Register Masks */
+/* Priority Register Masks with range validation */
 #ifndef ARM_PRIORITY_BITS
 #ifdef __NVIC_PRIO_BITS
 #define ARM_PRIORITY_BITS __NVIC_PRIO_BITS
@@ -54,7 +57,18 @@
 #define ARM_PRIORITY_BITS 4 /* BSP default; override per SoC */
 #endif
 #endif
+
+/* Validate ARM_PRIORITY_BITS is within valid range */
+#if ARM_PRIORITY_BITS < 2 || ARM_PRIORITY_BITS > 8
+#error "ARM_PRIORITY_BITS must be between 2 and 8 inclusive"
+#endif
+
+/* Calculate priority mask based on validated priority bits */
 #define ARM_PRIORITY_MASK ((uint8_t)(0xFFu << (8 - ARM_PRIORITY_BITS)))
+
+/* Priority level constants for validated range */
+#define ARM_PRIORITY_LEVELS (1u << ARM_PRIORITY_BITS)
+#define ARM_MAX_PRIORITY_VALUE (ARM_PRIORITY_LEVELS - 1)
 
 /* Common Magic Values - for reference only, use descriptive names */
 #define ARM_MAGIC_DEAD 0xDEADu /* Debug marker value */

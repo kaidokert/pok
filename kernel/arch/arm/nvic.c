@@ -141,6 +141,12 @@ pok_ret_t pok_nvic_set_handler(uint8_t irq, void (*handler)(void)) {
     return POK_ERRNO_EINVAL;
   }
 
+  /* Prevent overwriting critical system vectors */
+  if (irq == 0 || irq == 1) {
+    /* Vector 0: Initial Stack Pointer (MSP), Vector 1: Reset Handler */
+    return POK_ERRNO_EINVAL; /* Cannot modify critical system vectors */
+  }
+
   /* Ensure vector table has been relocated to RAM */
   if (!vector_table_relocated) {
     pok_ret_t ret = pok_nvic_relocate_vector_table();

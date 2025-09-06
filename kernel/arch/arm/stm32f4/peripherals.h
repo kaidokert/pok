@@ -29,6 +29,7 @@
 
 /* APB1 Peripherals */
 #define STM32F4_APB1_BASE 0x40000000UL
+#define STM32F4_PWR_BASE 0x40007000UL /* Power control for VOS scaling */
 
 /* APB2 Peripherals */
 #define STM32F4_APB2_BASE 0x40010000UL

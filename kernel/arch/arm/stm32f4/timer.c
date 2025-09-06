@@ -46,6 +46,35 @@
 #define SYSTICK_MAX_RELOAD 0xFFFFFF
 
 pok_ret_t pok_timer_init(void) {
+  /* Enhanced SysTick reload validation for all clock configurations */
+
+  /* Check for division by zero or invalid tick rate */
+  if (TIMER_TICK_HZ == 0) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: TIMER_TICK_HZ cannot be zero\n");
+#endif
+    return POK_ERRNO_EINVAL;
+  }
+
+  /* Check for invalid system frequency */
+  if (SYSTICK_FREQ_HZ == 0) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: SYSTICK_FREQ_HZ cannot be zero\n");
+#endif
+    return POK_ERRNO_EINVAL;
+  }
+
+  /* Validate reload value is reasonable (not too small) */
+  if (TIMER_RELOAD_VAL < 100) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: SysTick reload value %u too small (min 100 for stability)\n",
+           TIMER_RELOAD_VAL);
+    printf("System freq: %u Hz, Tick rate: %u Hz\n", SYSTICK_FREQ_HZ,
+           TIMER_TICK_HZ);
+#endif
+    return POK_ERRNO_EINVAL;
+  }
+
   /* Validate SysTick reload value doesn't exceed 24-bit limit */
   if (TIMER_RELOAD_VAL > SYSTICK_MAX_RELOAD) {
 #ifdef POK_NEEDS_DEBUG
@@ -54,6 +83,17 @@ pok_ret_t pok_timer_init(void) {
     printf("Consider reducing SYSTICK_FREQ_HZ or increasing TIMER_TICK_HZ\n");
 #endif
     return POK_ERRNO_EINVAL;
+  }
+
+  /* Validate that actual tick frequency will be reasonable */
+  uint32_t actual_freq = SYSTICK_FREQ_HZ / TIMER_RELOAD_VAL;
+  if (actual_freq < TIMER_TICK_HZ * 0.95 ||
+      actual_freq > TIMER_TICK_HZ * 1.05) {
+#ifdef POK_NEEDS_DEBUG
+    printf("WARNING: Actual tick frequency %u Hz differs from target %u Hz\n",
+           actual_freq, TIMER_TICK_HZ);
+    printf("Clock configuration may need adjustment\n");
+#endif
   }
 
 #ifdef POK_NEEDS_DEBUG

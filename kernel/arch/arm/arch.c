@@ -104,13 +104,16 @@ uint32_t pok_thread_stack_addr(const uint8_t partition_id,
       local_thread_id * POK_USER_STACK_SIZE + POK_STACK_GUARD_BYTES;
   uint32_t partition_size = pok_partitions[partition_id].size;
 
-  /* Add validation to ensure the computed address does not underflow */
-  if (stack_offset >= partition_size) {
+  /* Validate that both stack start and end are within partition bounds */
+  if (stack_offset >= partition_size ||
+      (stack_offset + POK_USER_STACK_SIZE) > partition_size) {
     /* Return an error value or handle gracefully */
-    return 0; /* Invalid stack address */
+    return 0; /* Invalid stack address - stack extends beyond partition */
   }
 
-  return partition_size - stack_offset;
+  /* Return absolute stack address for consistency with other architectures */
+  uint32_t partition_base = pok_partitions[partition_id].base_addr;
+  return partition_base + partition_size - stack_offset;
 }
 
 __attribute__((noreturn)) void pok_division_by_zero_error(void) {

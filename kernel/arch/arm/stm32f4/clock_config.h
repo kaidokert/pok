@@ -42,9 +42,21 @@
 #define APB1_FREQ_HZ 42000000    /* APB1 bus clock (PCLK1) - max 42MHz */
 #define APB2_FREQ_HZ 84000000    /* APB2 bus clock (PCLK2) - max 84MHz */
 
-/* Timer clock frequencies (APBx clocks x2 when prescaler > 1) */
-#define APB1_TIMER_FREQ_HZ (APB1_FREQ_HZ * 2) /* 84MHz */
-#define APB2_TIMER_FREQ_HZ (APB2_FREQ_HZ * 2) /* 168MHz */
+/* Timer clock frequencies - correct calculation based on actual prescaler
+ * values STM32 rule: Timer clock = APBx clock * 2 when APB prescaler > 1,
+ * otherwise APBx clock * 1 Current config: APB1 prescaler = /4 (>1), APB2
+ * prescaler = /2 (>1)
+ */
+#define APB1_PRESCALER 4 /* APB1 Prescaler from SYSCLK */
+#define APB2_PRESCALER 2 /* APB2 Prescaler from SYSCLK */
+
+/* Calculate timer frequencies based on actual prescaler values */
+#define APB1_TIMER_FREQ_HZ                                                     \
+  ((APB1_PRESCALER > 1) ? (APB1_FREQ_HZ * 2)                                   \
+                        : APB1_FREQ_HZ) /* 84MHz when prescaler=4 */
+#define APB2_TIMER_FREQ_HZ                                                     \
+  ((APB2_PRESCALER > 1) ? (APB2_FREQ_HZ * 2)                                   \
+                        : APB2_FREQ_HZ) /* 168MHz when prescaler=2 */
 
 /* SysTick uses SYSCLK by default */
 #define SYSTICK_FREQ_HZ SYSCLK_FREQ_HZ

@@ -105,8 +105,10 @@ pok_ret_t pok_mpu_configure_region(uint8_t region, uint32_t base_addr,
   /* Select region */
   MPU_RNR = region;
 
-  /* Configure base address */
-  MPU_RBAR = base_addr | MPU_RBAR_VALID | region;
+  /* Configure base address - ensure base address is properly masked and region
+   * is in correct position */
+  MPU_RBAR = (base_addr & ~MPU_RBAR_REGION_MASK) | MPU_RBAR_VALID |
+             (region & MPU_RBAR_REGION_MASK);
 
   /* Configure attributes and size */
   uint32_t size_field = pok_mpu_size_to_rasr(size);
@@ -182,8 +184,10 @@ pok_ret_t pok_mpu_configure_region_with_subregions(uint8_t region,
   /* Select region */
   MPU_RNR = region;
 
-  /* Configure base address */
-  MPU_RBAR = base_addr | MPU_RBAR_VALID | region;
+  /* Configure base address - ensure base address is properly masked and region
+   * is in correct position */
+  MPU_RBAR = (base_addr & ~MPU_RBAR_REGION_MASK) | MPU_RBAR_VALID |
+             (region & MPU_RBAR_REGION_MASK);
 
   /* Configure attributes, size, and subregion disable */
   uint32_t size_field = pok_mpu_size_to_rasr(aligned_size);

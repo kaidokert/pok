@@ -161,18 +161,16 @@ static void MemManage_Handler_C(uint32_t *frame) {
   fault_puts("\n");
 #endif
 
-  /* Handle partition isolation violation */
-  if (partition_id < POK_CONFIG_NB_PARTITIONS) {
-    /* Terminate the offending partition and, on success, reschedule globally
-     * and return */
-    if (pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED) ==
-        POK_ERRNO_OK) {
-      pok_global_sched();
-      return;
-    }
-  }
+  /* For safety-critical systems, halt immediately on memory faults
+   * instead of attempting complex recovery from fault context */
+#ifdef POK_NEEDS_DEBUG
+  fault_puts("FATAL: Memory protection violation in partition ");
+  fault_put_dec(partition_id);
+  fault_puts(" - System halted for safety\n");
+#endif
 
-  /* Could not recover: halt the system */
+  /* Halt the system - safer than attempting partition recovery from fault
+   * handler */
   while (1) {
     __asm volatile("wfi");
   }
@@ -230,13 +228,11 @@ static void BusFault_Handler_C(uint32_t *frame) {
   fault_puts("\n");
 #endif
 
-  if (partition_id < POK_CONFIG_NB_PARTITIONS) {
-    if (pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED) ==
-        POK_ERRNO_OK) {
-      pok_global_sched();
-      return;
-    }
-  }
+  /* Halt system immediately - safer than partition recovery from fault context
+   */
+#ifdef POK_NEEDS_DEBUG
+  fault_puts("FATAL: Bus fault recovery disabled - System halted for safety\n");
+#endif
   while (1) {
     __asm volatile("wfi");
   }
@@ -275,13 +271,13 @@ static void UsageFault_Handler_C(uint32_t *frame) {
   fault_puts("\n");
 #endif
 
-  if (partition_id < POK_CONFIG_NB_PARTITIONS) {
-    if (pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED) ==
-        POK_ERRNO_OK) {
-      pok_global_sched();
-      return;
-    }
-  }
+  /* Halt system immediately - safer than partition recovery from fault context
+   */
+#ifdef POK_NEEDS_DEBUG
+  fault_puts("FATAL: Bus fault in partition ");
+  fault_put_dec(partition_id);
+  fault_puts(" - System halted for safety\n");
+#endif
   while (1) {
     __asm volatile("wfi");
   }
@@ -330,15 +326,11 @@ static void HardFault_Handler_C(uint32_t *frame) {
   fault_puts("\n");
 #endif
 
-  /* Try to recover by stopping the current partition */
-  if (partition_id < POK_CONFIG_NB_PARTITIONS) {
-    if (pok_partition_set_mode(partition_id, POK_PARTITION_MODE_STOPPED) ==
-        POK_ERRNO_OK) {
-      pok_global_sched();
-      return;
-    }
-  }
-  /* If recovery fails, halt the system */
+  /* Halt system immediately - HardFault indicates severe system error */
+#ifdef POK_NEEDS_DEBUG
+  fault_puts(
+      "FATAL: Hard fault recovery disabled - System halted for safety\n");
+#endif
   while (1) {
     __asm volatile("wfi");
   }

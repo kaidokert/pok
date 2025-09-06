@@ -67,15 +67,17 @@ my %tools_common =
  );
 
 my %tools_arch;
+# ARM toolchain configuration - REQUIRE real cross-toolchain, no host fallbacks
+# Host tools (gcc, ld, objdump, etc.) are removed to prevent incorrect architecture builds
 $tools_arch{"arm"} =
 {
- "AR" 	      =>  ["arm-none-eabi-ar", "arm-elf-ar", "ar"],
- "CC"          =>  ["arm-none-eabi-gcc", "arm-elf-gcc", "gcc"],
- "CXX"	      =>  ["arm-none-eabi-g++", "arm-elf-g++", "g++"],
- "LD"	         =>  ["arm-none-eabi-ld", "arm-elf-ld", "ld"],
- "OBJDUMP"     =>  ["arm-none-eabi-objdump", "arm-elf-objdump", "objdump"],
- "OBJCOPY"     =>  ["arm-none-eabi-objcopy", "arm-elf-objcopy", "objcopy"],
- "RANLIB"      =>  ["arm-none-eabi-ranlib", "arm-elf-ranlib", "ranlib"],
+ "AR" 	      =>  ["arm-none-eabi-ar", "arm-elf-ar"],
+ "CC"          =>  ["arm-none-eabi-gcc", "arm-elf-gcc"],
+ "CXX"	      =>  ["arm-none-eabi-g++", "arm-elf-g++"],
+ "LD"	         =>  ["arm-none-eabi-ld", "arm-elf-ld"],
+ "OBJDUMP"     =>  ["arm-none-eabi-objdump", "arm-elf-objdump"],
+ "OBJCOPY"     =>  ["arm-none-eabi-objcopy", "arm-elf-objcopy"],
+ "RANLIB"      =>  ["arm-none-eabi-ranlib", "arm-elf-ranlib"],
  "QEMU"        =>  ["qemu-system-arm", "arm-softmmu", "qemu-system-arm"],
  };
 

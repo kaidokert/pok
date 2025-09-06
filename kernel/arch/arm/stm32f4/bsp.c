@@ -195,6 +195,24 @@ pok_ret_t pok_stm32f4_clock_init(void) {
     return POK_ERRNO_EFAULT; /* HSE failed to start */
   }
 
+  /* Configure voltage regulator scaling for 168MHz operation
+   * VOS = Scale 1 mode (required for frequencies > 144 MHz) */
+  volatile uint32_t *PWR_CR = (uint32_t *)STM32F4_PWR_BASE;
+
+  /* Enable PWR clock in RCC */
+  volatile uint32_t *RCC_APB1ENR = (uint32_t *)(STM32F4_RCC_BASE + 0x40);
+  *RCC_APB1ENR |= (1 << 28); /* PWREN = 1 */
+
+  /* Set VOS to Scale 1 (highest performance, required for 168MHz) */
+  *PWR_CR |= (3 << 14); /* VOS[1:0] = 11 (Scale 1 mode) */
+
+  /* Wait for voltage regulator to be ready */
+  timeout = 1000;
+  volatile uint32_t *PWR_CSR = (uint32_t *)(STM32F4_PWR_BASE + 0x04);
+  while (!((*PWR_CSR) & (1 << 14)) && timeout > 0) { /* Wait for VOSRDY = 1 */
+    timeout--;
+  }
+
   /* Configure PLL:
    * PLL_M = 8 (HSE/8 = 1MHz)
    * PLL_N = 336 (1MHz * 336 = 336MHz)
