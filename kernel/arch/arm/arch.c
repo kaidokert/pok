@@ -26,10 +26,20 @@
 /* POK core headers */
 #include <arch.h>
 #include <core/partition.h>
+#include <core/thread.h>
 
 /* Architecture-specific headers */
 #include "mpu.h"
 #include "nvic.h"
+
+/* Ensure required constants are defined */
+#ifndef POK_CONFIG_NB_PARTITIONS
+#error "POK_CONFIG_NB_PARTITIONS must be defined in deployment.h"
+#endif
+
+#ifndef POK_USER_STACK_SIZE
+#error "POK_USER_STACK_SIZE must be defined (included via core/thread.h)"
+#endif
 
 /* Stack address calculation constants */
 #define POK_STACK_GUARD_BYTES 8     /* Guard offset for stack calculations */
@@ -200,11 +210,13 @@ uint32_t pok_thread_stack_addr(const uint8_t partition_id,
   /* Check potential overflow first, then compute */
   if ((uint64_t)POK_USER_STACK_SIZE + (uint64_t)POK_STACK_GUARD_BYTES >
       (uint64_t)UINT32_MAX) {
-    return POK_INVALID_STACK_ADDRESS; /* Stack size configuration would overflow */
+    return POK_INVALID_STACK_ADDRESS; /* Stack size configuration would overflow
+                                       */
   }
   uint32_t effective_stack_size = POK_USER_STACK_SIZE + POK_STACK_GUARD_BYTES;
   if (partition_size < effective_stack_size) {
-    return POK_INVALID_STACK_ADDRESS; /* Partition too small for even one thread */
+    return POK_INVALID_STACK_ADDRESS; /* Partition too small for even one thread
+                                       */
   }
   /* Calculate max threads with overflow protection */
   uint32_t max_threads = partition_size / effective_stack_size;

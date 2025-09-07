@@ -46,6 +46,15 @@
 #define SYSTICK_CSR_TICKINT (1 << 1)
 #define SYSTICK_CSR_CLKSOURCE (1 << 2)
 
+/* Compile-time checks to prevent divide-by-zero errors */
+#if !defined(POK_TIMER_FREQUENCY) || (POK_TIMER_FREQUENCY == 0)
+#error "POK_TIMER_FREQUENCY must be defined and non-zero"
+#endif
+
+#if !defined(SYSTICK_FREQ_HZ) || (SYSTICK_FREQ_HZ == 0)
+#error "SYSTICK_FREQ_HZ must be defined and non-zero"
+#endif
+
 /* Timer frequency from POK core (100kHz for proper timing consistency) */
 #define TIMER_RELOAD_VAL (SYSTICK_FREQ_HZ / POK_TIMER_FREQUENCY)
 
@@ -61,6 +70,29 @@ pok_ret_t pok_timer_init(void) {
   if (SYSTICK_FREQ_HZ == 0) {
 #ifdef POK_NEEDS_DEBUG
     printf("ERROR: SYSTICK_FREQ_HZ cannot be zero\n");
+#endif
+    return POK_ERRNO_EINVAL;
+  }
+
+  /* CRITICAL: Check for timer configuration that would cause divide-by-zero */
+  if (POK_TIMER_FREQUENCY > SYSTICK_FREQ_HZ) {
+#ifdef POK_NEEDS_DEBUG
+    printf(
+        "ERROR: POK_TIMER_FREQUENCY (%u Hz) exceeds SYSTICK_FREQ_HZ (%u Hz)\n",
+        POK_TIMER_FREQUENCY, SYSTICK_FREQ_HZ);
+    printf("This would cause TIMER_RELOAD_VAL = 0 and subsequent "
+           "divide-by-zero\n");
+    printf("Reduce POK_TIMER_FREQUENCY or increase SYSTICK_FREQ_HZ\n");
+#endif
+    return POK_ERRNO_EINVAL;
+  }
+
+  /* Additional check: ensure TIMER_RELOAD_VAL is not zero after division */
+  if (TIMER_RELOAD_VAL == 0) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: TIMER_RELOAD_VAL computed to zero\n");
+    printf("SYSTICK_FREQ_HZ=%u, POK_TIMER_FREQUENCY=%u\n", SYSTICK_FREQ_HZ,
+           POK_TIMER_FREQUENCY);
 #endif
     return POK_ERRNO_EINVAL;
   }
@@ -89,6 +121,7 @@ pok_ret_t pok_timer_init(void) {
 
   /* Validate that actual tick frequency will be reasonable - use integer
    * arithmetic to avoid FP */
+  /* TIMER_RELOAD_VAL is guaranteed non-zero by checks above */
   uint32_t actual_freq = SYSTICK_FREQ_HZ / TIMER_RELOAD_VAL;
   /* Check tolerance using cross-multiplication: actual_freq * 100 vs
    * POK_TIMER_FREQUENCY * [95,105] */
@@ -136,13 +169,13 @@ void pok_timer_handler(void) {
   /* Clear SysTick interrupt flag (automatically cleared by reading CSR) */
   (void)SYSTICK_CSR;
 
-  /* Update POK system time in nanoseconds - consistent with other POK
-   * architectures Each timer interrupt represents 1/POK_TIMER_FREQUENCY seconds
-   * = 10^9/POK_TIMER_FREQUENCY nanoseconds */
-  /* Base + fractional remainder distribution to avoid drift */
-  #define NSEC_PER_SEC 1000000000ULL
-  #define TICK_NS_BASE ((uint32_t)(NSEC_PER_SEC / POK_TIMER_FREQUENCY))
-  #define TICK_NS_REM  ((uint32_t)(NSEC_PER_SEC % POK_TIMER_FREQUENCY))
+/* Update POK system time in nanoseconds - consistent with other POK
+ * architectures Each timer interrupt represents 1/POK_TIMER_FREQUENCY seconds
+ * = 10^9/POK_TIMER_FREQUENCY nanoseconds */
+/* Base + fractional remainder distribution to avoid drift */
+#define NSEC_PER_SEC 1000000000ULL
+#define TICK_NS_BASE ((uint32_t)(NSEC_PER_SEC / POK_TIMER_FREQUENCY))
+#define TICK_NS_REM ((uint32_t)(NSEC_PER_SEC % POK_TIMER_FREQUENCY))
   pok_tick_counter += TICK_NS_BASE;
   static uint32_t ns_rem_acc;
   ns_rem_acc += TICK_NS_REM;

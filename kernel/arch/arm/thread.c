@@ -46,7 +46,7 @@
  * @return Context pointer on success, 0 on failure
  */
 uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
-                            uintptr_t entry) {
+                            uint32_t entry) {
   start_context_t *sp;
   char *stack_addr;
 
@@ -74,13 +74,14 @@ uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
 
   /* Initialize context for thread startup */
   sp->ctx.pc = (uint32_t)pok_arch_thread_start; /* Start with thread wrapper */
-  sp->ctx.lr = ARM_EXC_RETURN_THREAD_PSP; /* Return to Thread mode, use PSP */
-  sp->ctx.xpsr = 0x01000000;              /* Thumb bit set */
-  sp->ctx.r0 = (uint32_t)sp;              /* Pass context pointer via R0 */
+  sp->ctx.lr =
+      (uint32_t)pok_arch_thread_exit_stub; /* Exit stub for thread return */
+  sp->ctx.xpsr = 0x01000000;               /* Thumb bit set */
+  sp->ctx.r0 = (uint32_t)sp;               /* Pass context pointer via R0 */
 
-  /* CRITICAL FIX: PSP must point TO the saved context frame
-   * For ARM Cortex-M exception return, PSP points to where stack will be
-   * after hardware pops the exception frame (r0-r3,r12,lr,pc,xpsr).
+  /* CRITICAL FIX: PSP must point to the hardware frame for exception return
+   * The thread's SP field should contain the PSP value that points to where
+   * hardware exception return will find the context frame.
    *
    * Stack layout (high to low address):
    * [stack_addr + stack_size] <- stack top
@@ -89,8 +90,7 @@ uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
    * [software frame: r11,r10,r9,r8,r7,r6,r5,r4] <- 8 words (32 bytes)
    * [start_context_t] <- our context structure
    *
-   * PSP calculation: initial_psp points to start of hardware frame
-   * for proper exception return
+   * PSP should point to hardware frame (r0) for proper exception return
    */
   uint32_t initial_psp =
       (uint32_t)(uintptr_t)&sp->ctx.r0; /* Points to start of hardware frame */
@@ -117,7 +117,10 @@ uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
   sp->entry = entry;
   sp->id = thread_id;
 
-  return ((uint32_t)sp);
+  /* Return the initial PSP value pointing to the hardware frame
+   * This value will be stored in pok_threads[].sp and used by context switcher
+   */
+  return initial_psp;
 }
 
 /* Global variables for PendSV context switching - accessed by PendSV handler */
@@ -135,6 +138,10 @@ volatile uint32_t g_new_sp = 0;
  */
 void pok_context_switch(uint32_t *old_sp, uint32_t new_sp) {
   if (old_sp == NULL) {
+    /* Clear global variables to prevent stale values from affecting future
+     * context switches */
+    g_old_sp_ptr = NULL;
+    g_new_sp = 0;
     return;
   }
 
@@ -191,7 +198,8 @@ void pok_context_reset(uint32_t stack_size, uint32_t stack_addr) {
   memset(sp, 0, sizeof(start_context_t));
 
   sp->ctx.pc = (uint32_t)pok_arch_thread_start;
-  sp->ctx.lr = ARM_EXC_RETURN_THREAD_PSP;
+  sp->ctx.lr =
+      (uint32_t)pok_arch_thread_exit_stub; /* Exit stub for thread return */
   sp->ctx.xpsr = 0x01000000;
   sp->ctx.r0 = (uint32_t)sp; /* Pass context pointer via R0 */
 
@@ -218,6 +226,42 @@ void pok_context_reset(uint32_t stack_size, uint32_t stack_addr) {
 }
 
 /*
+ * Thread exit stub - naked assembly wrapper for thread termination
+ * This function is used as the LR value for threads to handle proper
+ * termination if the thread function returns.
+ */
+void __attribute__((naked, used)) pok_arch_thread_exit_stub(void) {
+  __asm volatile(
+      /* Call the thread termination handler */
+      "bl pok_arch_thread_exit_handler    \n"
+      /* Should never return, but loop if it does */
+      "1:                                 \n"
+      "  wfi                              \n"
+      "  b 1b                             \n"
+      :
+      :
+      : "memory");
+}
+
+/*
+ * Thread exit handler - called when thread function returns
+ */
+static void pok_arch_thread_exit_handler(void) {
+#ifdef POK_NEEDS_DEBUG
+  printf("FATAL: Thread returned from entry function - terminating\n");
+#endif
+
+  /* Terminate this thread safely through the POK scheduler */
+  pok_sched_stop_self(); /* Terminate this thread properly */
+
+  /* If pok_sched_stop_self returns (which should not happen),
+   * enter safe infinite loop without disabling global interrupts */
+  while (1) {
+    __asm volatile("wfi"); /* Wait for interrupt (low power) */
+  }
+}
+
+/*
  * Thread startup wrapper
  * This function is called when a new thread starts execution
  */
@@ -228,28 +272,15 @@ void pok_arch_thread_start(start_context_t *ctx) {
   entry = ctx->entry;
   thread_id = ctx->id;
 
-  /* Call POK core thread start function */
+  /* Call POK core thread start function
+   * NOTE: If this function returns, the thread's LR register will cause
+   * a branch to pok_arch_thread_exit_stub() which handles termination properly.
+   */
   pok_thread_start((void (*)(void))entry, thread_id);
 
-  /* CRITICAL: Handle thread function return to avoid undefined control flow
-   * In safety-critical systems, threads should not return. If a thread
-   * function returns, we must terminate the thread safely rather than
-   * allowing undefined execution to continue.
+  /* NOTE: Execution should not reach here as pok_thread_start() should not
+   * return. If it does return, the ARM exception return mechanism will use the
+   * LR register (set to pok_arch_thread_exit_stub) to handle thread termination
+   * safely.
    */
-#ifdef POK_NEEDS_DEBUG
-  printf("FATAL: Thread %d returned from entry function - terminating\n",
-         thread_id);
-#endif
-
-  /* Terminate this thread safely through the POK scheduler
-   * This prevents undefined control flow while keeping the system stable.
-   * Using POK's thread termination ensures proper resource cleanup.
-   */
-  pok_sched_stop_self(); /* Terminate this thread properly */
-
-  /* If pok_sched_stop_self returns (which should not happen),
-   * enter safe infinite loop without disabling global interrupts */
-  while (1) {
-    __asm volatile("wfi"); /* Wait for interrupt (low power) */
-  }
 }

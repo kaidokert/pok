@@ -100,10 +100,10 @@ static void svc_handler_impl(uint32_t *frame) {
 
   /* Extract addressing info */
   uint32_t user_vaddr = frame[1]; /* r1 - user virtual address */
-  uint32_t base_addr   = pok_partitions[syscall_info.partition].base_addr;
-  uint32_t base_vaddr  = pok_partitions[syscall_info.partition].base_vaddr;
-  uint32_t psize       = pok_partitions[syscall_info.partition].size;
-  uint32_t args_size   = (uint32_t)sizeof(pok_syscall_args_t);
+  uint32_t base_addr = pok_partitions[syscall_info.partition].base_addr;
+  uint32_t base_vaddr = pok_partitions[syscall_info.partition].base_vaddr;
+  uint32_t psize = pok_partitions[syscall_info.partition].size;
+  uint32_t args_size = (uint32_t)sizeof(pok_syscall_args_t);
 
   /* Validate that the arguments pointer lies fully within the partition's
    * virtual range [base_vaddr, base_vaddr + psize) with overflow checks */
@@ -219,17 +219,27 @@ void __attribute__((naked)) PendSV_Handler(void) {
       "ldr r1, [r1]               \n" /* Load g_old_sp_ptr value (the address of
                                          sp) */
       "cbz r1, 1f                 \n" /* Skip if NULL */
-      "str r0, [r1]               \n" /* Store new PSP value into the thread
+      /* CRITICAL FIX: Store PSP pointing to hardware frame, not after software
+         regs */
+      "add r3, r0, #32            \n" /* r3 = r0 + 32 (point to hardware frame)
+                                       */
+      "str r3, [r1]               \n" /* Store corrected PSP value into thread
                                          struct */
 
       "1:                         \n" /* Load new thread context */
       "ldr r2, =g_new_sp          \n" /* r2 = &g_new_sp */
-      "ldr r0, [r2]               \n" /* r0 = g_new_sp value */
+      "ldr r0, [r2]               \n" /* r0 = g_new_sp value (points to hardware
+                                         frame) */
       "cbz r0, 3f                 \n" /* Skip if NULL */
 
-      "ldmia r0!, {r4-r11}        \n" /* Restore r4-r11 from new thread's stack
+      /* CRITICAL FIX: Adjust PSP to point to software-saved registers for
+         restoration */
+      "sub r0, r0, #32            \n" /* r0 = r0 - 32 (point to software regs)
                                        */
-      "msr psp, r0                \n" /* Set new Process Stack Pointer */
+      "ldmia r0!, {r4-r11}        \n" /* Restore r4-r11, r0 now points to
+                                         hardware frame */
+      "msr psp, r0                \n" /* Set PSP to hardware frame for exception
+                                         return */
 
       /* Clear g_new_sp to prevent stale reuse */
       "movs r3, #0                \n"

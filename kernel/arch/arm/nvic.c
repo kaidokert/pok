@@ -450,9 +450,9 @@ pok_ret_t pok_nvic_set_vector_table(uint32_t offset) {
   }
 
   /* Validate target address is in valid memory region (Flash or SRAM) */
-  bool in_flash = (offset >= STM32F4_FLASH_BASE &&
-                   offset < (STM32F4_FLASH_BASE + STM32F4_FLASH_SIZE));
-  bool in_sram =
+  pok_bool_t in_flash = (offset >= STM32F4_FLASH_BASE &&
+                         offset < (STM32F4_FLASH_BASE + STM32F4_FLASH_SIZE));
+  pok_bool_t in_sram =
       (offset >= POK_SRAM_BASE && offset < (POK_SRAM_BASE + POK_SRAM_SIZE));
 
   if (!in_flash && !in_sram) {
