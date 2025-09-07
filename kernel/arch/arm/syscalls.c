@@ -98,23 +98,28 @@ static void svc_handler_impl(uint32_t *frame) {
    */
   syscall_id = (pok_syscall_id_t)frame[0]; /* r0 */
 
-  /*
-   * Validate that the arguments pointer is within partition bounds
-   */
-  if (!pok_check_ptr_in_partition(syscall_info.partition, (void *)frame[1],
-                                  sizeof(pok_syscall_args_t))) {
+  /* Extract addressing info */
+  uint32_t user_vaddr = frame[1]; /* r1 - user virtual address */
+  uint32_t base_addr   = pok_partitions[syscall_info.partition].base_addr;
+  uint32_t base_vaddr  = pok_partitions[syscall_info.partition].base_vaddr;
+  uint32_t psize       = pok_partitions[syscall_info.partition].size;
+  uint32_t args_size   = (uint32_t)sizeof(pok_syscall_args_t);
+
+  /* Validate that the arguments pointer lies fully within the partition's
+   * virtual range [base_vaddr, base_vaddr + psize) with overflow checks */
+  if (args_size > psize) {
     syscall_ret = POK_ERRNO_EINVAL;
     goto syscall_exit;
   }
-
-  /*
-   * Translate user virtual address to kernel address space
-   * user_vaddr -> kernel_addr = user_vaddr + (base_addr - base_vaddr)
-   */
-  uint32_t user_vaddr = frame[1]; /* r1 - user virtual address */
-  uint32_t base_addr = pok_partitions[syscall_info.partition].base_addr;
-  uint32_t base_vaddr = pok_partitions[syscall_info.partition].base_vaddr;
-
+  if (base_vaddr > (0xFFFFFFFFu - psize)) {
+    syscall_ret = POK_ERRNO_EINVAL; /* base_vaddr + size overflow */
+    goto syscall_exit;
+  }
+  uint32_t part_vend = base_vaddr + psize;
+  if (user_vaddr < base_vaddr || user_vaddr > (part_vend - args_size)) {
+    syscall_ret = POK_ERRNO_EINVAL; /* Pointer outside partition vaddr range */
+    goto syscall_exit;
+  }
   /* Check for underflow in offset calculation */
   if (base_vaddr > base_addr) {
     syscall_ret = POK_ERRNO_EINVAL; /* Invalid partition configuration */

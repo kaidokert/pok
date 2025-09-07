@@ -43,12 +43,22 @@
 #define PLL_Q 7   /* 336MHz / 7 = 48MHz for USB */
 
 /* PLL register bit positions and values */
+/* Use CMSIS-provided bit positions when available; fall back otherwise */
+#ifndef RCC_PLLCFGR_PLLQ_Pos
 #define RCC_PLLCFGR_PLLQ_Pos 24
+#endif
+#ifndef RCC_PLLCFGR_PLLP_Pos
 #define RCC_PLLCFGR_PLLP_Pos 16
+#endif
+#ifndef RCC_PLLCFGR_PLLN_Pos
 #define RCC_PLLCFGR_PLLN_Pos 6
+#endif
+#ifndef RCC_PLLCFGR_PLLM_Pos
 #define RCC_PLLCFGR_PLLM_Pos 0
+#endif
+#ifndef RCC_PLLCFGR_PLLSRC_Pos
 #define RCC_PLLCFGR_PLLSRC_Pos 22
-
+#endif
 /* Convert PLL_P value to register encoding (0=/2, 1=/4, 2=/6, 3=/8) */
 /* Compile-time validation: PLL_P must be even and in valid range */
 _Static_assert(
