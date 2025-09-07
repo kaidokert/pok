@@ -197,18 +197,15 @@ uint32_t pok_thread_stack_addr(const uint8_t partition_id,
   uint32_t partition_end = partition_base + partition_size;
 
   /* Validate partition size against minimum requirements */
+  /* Check potential overflow first, then compute */
+  if ((uint64_t)POK_USER_STACK_SIZE + (uint64_t)POK_STACK_GUARD_BYTES >
+      (uint64_t)UINT32_MAX) {
+    return POK_INVALID_STACK_ADDRESS; /* Stack size configuration would overflow */
+  }
   uint32_t effective_stack_size = POK_USER_STACK_SIZE + POK_STACK_GUARD_BYTES;
   if (partition_size < effective_stack_size) {
-    return POK_INVALID_STACK_ADDRESS; /* Partition too small for even one thread
-                                       */
+    return POK_INVALID_STACK_ADDRESS; /* Partition too small for even one thread */
   }
-
-  /* Check for potential overflow in effective stack size calculation */
-  if (POK_USER_STACK_SIZE > UINT32_MAX - POK_STACK_GUARD_BYTES) {
-    return POK_INVALID_STACK_ADDRESS; /* Stack size configuration would overflow
-                                       */
-  }
-
   /* Calculate max threads with overflow protection */
   uint32_t max_threads = partition_size / effective_stack_size;
   if (max_threads == 0) {
@@ -253,14 +250,15 @@ uint32_t pok_thread_stack_addr(const uint8_t partition_id,
 
   /* Final validation: ensure aligned stack has sufficient space
    * Check that stack bottom (after growth) plus guard is within partition */
+  if (aligned_stack_top < POK_USER_STACK_SIZE + POK_STACK_GUARD_BYTES) {
+    return POK_INVALID_STACK_ADDRESS;
+  }
   uint32_t stack_bottom = aligned_stack_top - POK_USER_STACK_SIZE;
   uint32_t guard_bottom = stack_bottom - POK_STACK_GUARD_BYTES;
-
-  if (guard_bottom < partition_base || stack_bottom < partition_base) {
+  if (stack_bottom < partition_base || guard_bottom < partition_base) {
     return POK_INVALID_STACK_ADDRESS; /* Stack + guard extends below partition
                                          base */
   }
-
   return aligned_stack_top;
 }
 

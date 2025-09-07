@@ -131,12 +131,12 @@ static void svc_handler_impl(uint32_t *frame) {
 
   uint32_t kernel_addr = user_vaddr + kernel_offset;
 
-  /* Ensure kernel address is properly aligned for syscall args structure */
-  if (kernel_addr & (sizeof(pok_syscall_args_t) - 1)) {
+  /* Ensure kernel address meets args struct alignment */
+  const size_t args_align = __alignof__(pok_syscall_args_t);
+  if (args_align && (kernel_addr & (args_align - 1))) {
     syscall_ret = POK_ERRNO_EINVAL; /* Misaligned address */
     goto syscall_exit;
   }
-
   /*
    * SECURITY: Copy syscall arguments to kernel-owned buffer to prevent TOCTOU
    * attacks. A malicious partition could modify arguments after validation but

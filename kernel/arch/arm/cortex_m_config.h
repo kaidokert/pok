@@ -16,12 +16,12 @@
 #define __POK_ARM_CORTEX_M_CONFIG_H__
 
 #include <errno.h>
-#include <libc.h>
+#include <stdint.h>
 #include <types.h>
 
 #ifdef POK_NEEDS_DEBUG
-/* Include arch.h for SCB register definitions */
-#include "arch.h"
+/* For printf diagnostics used below */
+#include <libc/stdio.h>
 #endif
 
 /**
@@ -107,6 +107,10 @@ static inline uint32_t cortex_m_clz_fallback(uint32_t x) {
 #endif
 
 /* Compile-time check: alignment must not be zero (overflow protection) */
+#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
+#define _Static_assert(cond, msg) \
+    typedef char static_assertion_##__LINE__[(cond) ? 1 : -1]
+#endif
 _Static_assert(CORTEX_M_NVIC_VECTOR_TABLE_ALIGNMENT != 0,
                "Vector table alignment overflow - reduce NVIC vector count");
 
@@ -119,7 +123,6 @@ _Static_assert(CORTEX_M_NVIC_VECTOR_TABLE_ALIGNMENT >=
 _Static_assert((CORTEX_M_NVIC_VECTOR_TABLE_ALIGNMENT &
                 (CORTEX_M_NVIC_VECTOR_TABLE_ALIGNMENT - 1)) == 0,
                "Vector table alignment must be a power of two");
-
 /* Additional compile-time validation for release builds - NVIC only */
 _Static_assert(CORTEX_M_NVIC_VECTOR_COUNT >= 16,
                "NVIC vector count must include at least 16 system vectors");
@@ -214,7 +217,7 @@ static inline pok_ret_t cortex_m_validate_config(void) {
   uint32_t hw_mpu_regions = (MPU_TYPE_REG >> 8) & 0xFF;
 
   if (CORTEX_M_MPU_MAX_REGIONS > hw_mpu_regions) {
-    printf("WARNING: CORTEX_M_MPU_MAX_REGIONS (%u) exceeds hardware capability "
+    printf("ERROR: CORTEX_M_MPU_MAX_REGIONS (%u) exceeds hardware capability "
            "(%u)\n",
            CORTEX_M_MPU_MAX_REGIONS, hw_mpu_regions);
     return POK_ERRNO_EINVAL;

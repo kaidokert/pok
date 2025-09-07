@@ -325,7 +325,12 @@ my %colors =
       # Fallback: Set based on available toolchains if no ARCH or unsupported ARCH
       if (!defined($ENV{'ARCH'})) {
          # Default to x86 for backward compatibility
-         if (exists $makevars{'CC_arm'}) {
+         # Default to x86 for backward compatibility
+         if ($sys_kind =~ /FreeBSD/ ) {
+            $makevars{'ELF_MODE'} = "elf_i386_fbsd";
+         } else {
+            $makevars{'ELF_MODE'} = "elf_i386";
+         }
             $makevars{'ELF_MODE'} = "armelf";
          } elsif ($sys_kind =~ /FreeBSD/ ) {
             $makevars{'ELF_MODE'} = "elf_i386_fbsd";

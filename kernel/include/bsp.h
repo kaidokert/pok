@@ -24,7 +24,7 @@
 
 #include <errno.h>
 #include <types.h>
-
+#include <stdint.h>
 pok_ret_t pok_bsp_init(void);
 
 pok_ret_t pok_bsp_irq_acknowledge(uint8_t irq);

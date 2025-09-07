@@ -117,11 +117,11 @@
 /* STM32F4-specific peripheral configurations for different memory access
  * patterns */
 #define MPU_CONFIG_PERIPHERAL_CRITICAL                                         \
-  (MPU_ATTR_PERIPHERAL_STRONGLY_ORDERED | MPU_PERM_PRIV_RW() | MPU_RASR_XN)
+  (MPU_ATTR_PERIPHERAL_STRONGLY_ORDERED | MPU_PERM_PRIV_RW | MPU_RASR_XN)
 #define MPU_CONFIG_PERIPHERAL_DEVICE                                           \
-  (MPU_ATTR_PERIPHERAL_DEVICE_XN | MPU_PERM_PRIV_RW())
+  (MPU_ATTR_PERIPHERAL_DEVICE_XN | MPU_PERM_PRIV_RW)
 #define MPU_CONFIG_CCM_SRAM                                                    \
-  (MPU_ATTR_INTERNAL_SRAM | MPU_PERM_PRIV_RW() | MPU_RASR_XN)
+  (MPU_ATTR_INTERNAL_SRAM | MPU_PERM_PRIV_RW | MPU_RASR_XN)
 
 /* MPU Size and Validation Helper Macros (delegate to mpu_utils.h) */
 #define MPU_MIN_REGION_SIZE                                                    \

@@ -139,7 +139,17 @@ void pok_timer_handler(void) {
   /* Update POK system time in nanoseconds - consistent with other POK
    * architectures Each timer interrupt represents 1/POK_TIMER_FREQUENCY seconds
    * = 10^9/POK_TIMER_FREQUENCY nanoseconds */
-  pok_tick_counter += (1000000000UL / POK_TIMER_FREQUENCY);
+  /* Base + fractional remainder distribution to avoid drift */
+  #define NSEC_PER_SEC 1000000000ULL
+  #define TICK_NS_BASE ((uint32_t)(NSEC_PER_SEC / POK_TIMER_FREQUENCY))
+  #define TICK_NS_REM  ((uint32_t)(NSEC_PER_SEC % POK_TIMER_FREQUENCY))
+  pok_tick_counter += TICK_NS_BASE;
+  static uint32_t ns_rem_acc;
+  ns_rem_acc += TICK_NS_REM;
+  if (ns_rem_acc >= POK_TIMER_FREQUENCY) {
+    ns_rem_acc -= POK_TIMER_FREQUENCY;
+    pok_tick_counter += 1; /* distribute leftover nanoseconds */
+  }
 
   /* Trigger scheduler election - timer ticks may require context switch */
   (void)pok_sched_election();

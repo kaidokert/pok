@@ -21,13 +21,13 @@
 #include <core/thread.h>
 #include <core/time.h>
 #include <libc/stdio.h>
-
+#include <stdint.h>
 void thread1_job(void) {
   int i = 0;
 
   while (1) {
     printf("Hello from ARM Cortex-M thread 1, iteration %d\n", i++);
-    pok_thread_sleep(1000000); /* Sleep for 1 second */
+    pok_thread_sleep(1000000000ULL); /* Sleep for 1 second */
   }
 }
 
@@ -36,7 +36,7 @@ void thread2_job(void) {
 
   while (1) {
     printf("Hello from ARM Cortex-M thread 2, iteration %d\n", i++);
-    pok_thread_sleep(1500000); /* Sleep for 1.5 seconds */
+    pok_thread_sleep(1500000000ULL); /* Sleep for 1.5 seconds */
   }
 }
 
