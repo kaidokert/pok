@@ -27,16 +27,13 @@
 #define POK_HAVE_STDDEF 1
 #endif
 #endif
-/* Fallback path for compilers without __has_include */
+/* Fallback path for compilers without __has_include support */
 #ifndef __has_include
-#ifndef POK_HAVE_STDINT
+/* Assume standard headers are available for compilers without __has_include */
 #include <stdint.h>
 #define POK_HAVE_STDINT 1
-#endif
-#ifndef POK_HAVE_STDDEF
 #include <stddef.h>
 #define POK_HAVE_STDDEF 1
-#endif
 #endif
 
 /* If stdint.h types are still not available, define them ourselves */

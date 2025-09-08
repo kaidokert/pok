@@ -155,10 +155,14 @@ pok_ret_t pok_timer_init(void) {
   SYSTICK_CVR = 0;
 
   /* Set SysTick priority (lower than most ISRs, but above PendSV)
-   * Priority 14 (PendSV=15 lowest, SVC=0 highest)
-   * SysTick is in SHPR3 register, bits 31:24 */
-  *SCB_SHPR3 =
-      (*SCB_SHPR3 & 0x00FFFFFF) | (14u << 24); /* SysTick priority 14 */
+   * Using NVIC helper to ensure proper ARM_PRIORITY_BITS encoding */
+  if (pok_nvic_set_priority(EXCEPTION_SYSTICK, NVIC_PRIORITY_LOW) !=
+      POK_ERRNO_OK) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: Failed to set SysTick priority\n");
+#endif
+    return POK_ERRNO_EINVAL;
+  }
   /* Clear any pending SysTick before enabling to avoid spurious tick */
   *SCB_ICSR |= SCB_ICSR_PENDSTCLR;
 

@@ -42,7 +42,7 @@ ifdef BSP
 endif
 
 depend:
-	$(if $(wildcard *.c *.S), $(CC) $(CFLAGS) -MM $(wildcard *.c) $(wildcard *.S) > .depend.mk,)
+	$(CC) $(CFLAGS) -MM $(wildcard *.c) $(wildcard *.S) > .depend.mk
 ifdef BSP
 	$(CD) $(BSP) && $(MAKE) depend
 endif

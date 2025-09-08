@@ -45,7 +45,7 @@
 #define PLL_M 8   /* HSE/8 = 1MHz */
 #define PLL_N 336 /* 1MHz * 336 = 336MHz */
 #define PLL_P 2   /* 336MHz / 2 = 168MHz SYSCLK */
-#define PLL_Q 7   /* 336MHz / 7 = 48MHz for USB */
+#define PLL_Q 7
 
 /* PLL parameter validation per RM0090 */
 #define VCO_IN_FREQ (HSE_FREQ_HZ / PLL_M)   /* Input to VCO after M divider */

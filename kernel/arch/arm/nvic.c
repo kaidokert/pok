@@ -33,8 +33,26 @@
 #include "stm32f4/peripherals.h"
 
 /* ARM Cortex-M intrinsics */
-#ifdef __ARM_ARCH
+#ifdef __has_include
+#if __has_include(<cmsis_gcc.h>)
 #include <cmsis_gcc.h>
+#define HAVE_CMSIS_GCC 1
+#endif
+#endif
+
+#ifndef HAVE_CMSIS_GCC
+/* Fallback intrinsics for builds without CMSIS */
+static inline void __disable_irq(void) {
+  __asm volatile("cpsid i" : : : "memory");
+}
+static inline uint32_t __get_PRIMASK(void) {
+  uint32_t result;
+  __asm volatile("mrs %0, PRIMASK" : "=r"(result) : : "memory");
+  return result;
+}
+static inline void __set_PRIMASK(uint32_t priMask) {
+  __asm volatile("msr PRIMASK, %0" : : "r"(priMask) : "memory");
+}
 #endif
 
 /* External vector table (defined in startup code) */
