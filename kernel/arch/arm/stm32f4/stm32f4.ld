@@ -34,9 +34,8 @@ SECTIONS
   .isr_vector :
   {
     . = ORIGIN(FLASH);  /* Force vector table to exact Flash start */
-    . = ALIGN(0x200);   /* Maintain required VTOR alignment */
     KEEP(*(.isr_vector))
-    . = ALIGN(0x200);
+    . = ALIGN(0x200);   /* Align after vector table for next section */
   } >FLASH
 
   /* Program code and constants */

@@ -113,24 +113,25 @@ static inline uint32_t cortex_m_clz_fallback(uint32_t x) {
 #else
 #define POK_STATIC_ASSERT(cond, msg) _Static_assert(cond, msg)
 #endif
-_Static_assert(CORTEX_M_NVIC_VECTOR_TABLE_ALIGNMENT != 0,
-               "Vector table alignment overflow - reduce NVIC vector count");
+POK_STATIC_ASSERT(CORTEX_M_NVIC_VECTOR_TABLE_ALIGNMENT != 0,
+                  "Vector table alignment overflow - reduce NVIC vector count");
 
 /* Compile-time check: vector table alignment must be >= vector table size */
-_Static_assert(CORTEX_M_NVIC_VECTOR_TABLE_ALIGNMENT >=
-                   CORTEX_M_NVIC_VECTOR_TABLE_SIZE,
-               "Vector table alignment must be at least as large as the vector "
-               "table size");
+POK_STATIC_ASSERT(
+    CORTEX_M_NVIC_VECTOR_TABLE_ALIGNMENT >= CORTEX_M_NVIC_VECTOR_TABLE_SIZE,
+    "Vector table alignment must be at least as large as the vector "
+    "table size");
 /* Compile-time check: vector table alignment must also be a power of two */
-_Static_assert((CORTEX_M_NVIC_VECTOR_TABLE_ALIGNMENT &
-                (CORTEX_M_NVIC_VECTOR_TABLE_ALIGNMENT - 1)) == 0,
-               "Vector table alignment must be a power of two");
+POK_STATIC_ASSERT((CORTEX_M_NVIC_VECTOR_TABLE_ALIGNMENT &
+                   (CORTEX_M_NVIC_VECTOR_TABLE_ALIGNMENT - 1)) == 0,
+                  "Vector table alignment must be a power of two");
 /* Additional compile-time validation for release builds - NVIC only */
-_Static_assert(CORTEX_M_NVIC_VECTOR_COUNT >= 16,
-               "NVIC vector count must include at least 16 system vectors");
-_Static_assert(CORTEX_M_NVIC_VECTOR_COUNT <= 496,
-               "NVIC vector count exceeds maximum ARM Cortex-M capability (480 "
-               "external + 16 system)");
+POK_STATIC_ASSERT(CORTEX_M_NVIC_VECTOR_COUNT >= 16,
+                  "NVIC vector count must include at least 16 system vectors");
+POK_STATIC_ASSERT(
+    CORTEX_M_NVIC_VECTOR_COUNT <= 496,
+    "NVIC vector count exceeds maximum ARM Cortex-M capability (480 "
+    "external + 16 system)");
 
 /* MPU (Memory Protection Unit) configuration */
 #ifndef CORTEX_M_MPU_MAX_REGIONS
@@ -144,14 +145,15 @@ _Static_assert(CORTEX_M_NVIC_VECTOR_COUNT <= 496,
 #endif
 
 /* Additional compile-time validation for MPU (after MPU constants defined) */
-_Static_assert(CORTEX_M_MPU_MAX_REGIONS <= 16,
-               "MPU region count exceeds maximum ARM Cortex-M capability (16)");
-_Static_assert(
+POK_STATIC_ASSERT(
+    CORTEX_M_MPU_MAX_REGIONS <= 16,
+    "MPU region count exceeds maximum ARM Cortex-M capability (16)");
+POK_STATIC_ASSERT(
     CORTEX_M_MPU_MIN_REGION_SIZE >= 32,
     "MPU minimum region size must be at least 32 bytes per ARM spec");
-_Static_assert((CORTEX_M_MPU_MIN_REGION_SIZE &
-                (CORTEX_M_MPU_MIN_REGION_SIZE - 1)) == 0,
-               "MPU minimum region size must be power of 2");
+POK_STATIC_ASSERT((CORTEX_M_MPU_MIN_REGION_SIZE &
+                   (CORTEX_M_MPU_MIN_REGION_SIZE - 1)) == 0,
+                  "MPU minimum region size must be power of 2");
 
 /* Thread/Stack configuration */
 #ifndef CORTEX_M_STACK_ALIGNMENT

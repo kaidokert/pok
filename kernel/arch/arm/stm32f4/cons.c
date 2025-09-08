@@ -196,7 +196,7 @@ pok_ret_t pok_cons_write(const char *s, size_t length) {
     }
     if (timeout == 0) {
       /* Avoid printf to prevent recursion in console write function */
-      return FALSE;
+      return POK_ERRNO_EFAULT;
     }
 
     /* Send character */

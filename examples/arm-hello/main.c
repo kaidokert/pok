@@ -27,7 +27,7 @@ void thread1_job(void) {
 
   while (1) {
     printf("Hello from ARM Cortex-M thread 1, iteration %d\n", i++);
-    pok_thread_sleep(1000000000ULL); /* Sleep for 1 second */
+    pok_thread_sleep(1000000ULL); /* Sleep for 1 second */
   }
 }
 
@@ -36,13 +36,14 @@ void thread2_job(void) {
 
   while (1) {
     printf("Hello from ARM Cortex-M thread 2, iteration %d\n", i++);
-    pok_thread_sleep(1500000000ULL); /* Sleep for 1.5 seconds */
+    pok_thread_sleep(1500000ULL); /* Sleep for 1.5 seconds */
   }
 }
 
 static inline void setup_thread_attributes(pok_thread_attr_t *attr,
                                            void (*func_ptr)(void)) {
-  /* Safe function pointer to void* conversion via uintptr_t */
+  /* FIXME: Function pointer to void* cast is non-portable for ARM Cortex-M
+   * Consider changing pok_thread_attr_t.entry to void (*entry)(void) */
   attr->entry = (void *)(uintptr_t)func_ptr;
   attr->priority = 1;
   attr->stack_size = 2048;
