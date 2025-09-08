@@ -123,6 +123,65 @@ static pok_bool_t mpu_regions_overlap_with_srd(uint32_t base1, uint32_t size1,
 }
 
 /**
+ * Check if two regions belong to the same partition for W^X overlap policy
+ *
+ * @param region_id1 First region ID
+ * @param region_id2 Second region ID
+ * @return TRUE if both regions belong to the same partition, FALSE otherwise
+ */
+static pok_bool_t is_same_partition_regions(uint8_t region_id1,
+                                            uint8_t region_id2) {
+  /* Region 0 is kernel - never allow overlap with kernel */
+  if (region_id1 == 0 || region_id2 == 0) {
+    return FALSE;
+  }
+
+  /* Extract partition IDs from region IDs using the mapping:
+   * - Data regions: partition_id = region_id - 1
+   * - Code regions: partition_id = region_id - 1 - POK_CONFIG_NB_PARTITIONS */
+  uint8_t partition_id1, partition_id2;
+
+  /* Determine partition for region_id1 */
+  if (region_id1 <= POK_CONFIG_NB_PARTITIONS) {
+    /* Data region */
+    partition_id1 = region_id1 - 1;
+  } else {
+    /* Code region */
+    partition_id1 = region_id1 - 1 - POK_CONFIG_NB_PARTITIONS;
+  }
+
+  /* Determine partition for region_id2 */
+  if (region_id2 <= POK_CONFIG_NB_PARTITIONS) {
+    /* Data region */
+    partition_id2 = region_id2 - 1;
+  } else {
+    /* Code region */
+    partition_id2 = region_id2 - 1 - POK_CONFIG_NB_PARTITIONS;
+  }
+
+  return (partition_id1 == partition_id2);
+}
+
+/**
+ * Check if a W^X overlap is valid (code region over data region)
+ *
+ * @param new_region_id ID of the new region being configured
+ * @param existing_region_id ID of the existing region
+ * @return TRUE if this is a valid W^X overlap, FALSE otherwise
+ */
+static pok_bool_t is_valid_wx_overlap(uint8_t new_region_id,
+                                      uint8_t existing_region_id) {
+  /* Only allow code regions to overlap data regions, not vice versa
+   * Code regions have higher region numbers and take priority in ARM MPU */
+  pok_bool_t new_is_code = (new_region_id > POK_CONFIG_NB_PARTITIONS);
+  pok_bool_t existing_is_data =
+      (existing_region_id > 0 &&
+       existing_region_id <= POK_CONFIG_NB_PARTITIONS);
+
+  return (new_is_code && existing_is_data);
+}
+
+/**
  * Validate that a new region doesn't overlap with existing enabled regions
  *
  * @param new_region_id ID of the region being configured (skip this in check)
@@ -138,20 +197,35 @@ static pok_ret_t mpu_validate_no_overlap(uint8_t new_region_id,
       continue;
     }
 
-    /* Check for overlap considering SubRegion Disable (SRD) masks
-     * POLICY: Currently prevents all overlaps for safety. Future enhancement
-     * could allow same-partition code-over-data overlaps for W^X enforcement
-     * (higher region numbers take priority in ARM MPU) */
+    /* Check for overlap considering SubRegion Disable (SRD) masks */
     if (mpu_regions_overlap_with_srd(
             base_addr, size, 0x00, /* New region has no SRD */
             mpu_regions[i].base_addr, mpu_regions[i].size,
             mpu_regions[i].srd_mask)) {
+
+      /* POLICY: Allow controlled same-partition overlaps for W^X enforcement
+       * Higher region numbers (code) take priority over lower (data) in ARM MPU
+       */
+      if (is_same_partition_regions(new_region_id, i) &&
+          is_valid_wx_overlap(new_region_id, i)) {
+#ifdef POK_NEEDS_DEBUG
+        printf("INFO: Allowing W^X overlap - code region %u over data region "
+               "%u (same partition)\n",
+               new_region_id, i);
+#endif
+        continue; /* Allow this overlap for W^X enforcement */
+      }
+
+      /* Reject all other overlaps */
 #ifdef POK_NEEDS_DEBUG
       printf("ERROR: MPU region %u overlaps with existing region %u\n",
              new_region_id, i);
       printf("  New: 0x%08X-0x%08X, Existing: 0x%08X-0x%08X\n", base_addr,
              base_addr + size - 1, mpu_regions[i].base_addr,
              mpu_regions[i].base_addr + mpu_regions[i].size - 1);
+      printf("  Same partition: %s, Valid W^X: %s\n",
+             is_same_partition_regions(new_region_id, i) ? "YES" : "NO",
+             is_valid_wx_overlap(new_region_id, i) ? "YES" : "NO");
 #endif
       return POK_ERRNO_EINVAL;
     }
