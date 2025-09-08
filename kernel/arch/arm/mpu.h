@@ -64,14 +64,13 @@
 #define MPU_AP_PRIV_RO (0x5 << MPU_RASR_AP_SHIFT)
 #define MPU_AP_ALL_RO (0x6 << MPU_RASR_AP_SHIFT)
 
-/* Memory attributes (TEX, C, B combinations) */
-#define MPU_ATTR_NORMAL (MPU_RASR_C | MPU_RASR_B)
-#define MPU_ATTR_STRONGLY_ORDERED 0  /* TEX=000, C=0, B=0 */
-#define MPU_ATTR_DEVICE (MPU_TEX(2)) /* TEX=010, C=0, B=0 */
-
-/* TEX/C/B Helper Macros for Common Memory Types */
+/* TEX/C/B Helper Macro */
 #define MPU_TEX(x) ((x) << MPU_RASR_TEX_SHIFT)
 
+/* Memory attributes (TEX, C, B combinations) */
+#define MPU_ATTR_NORMAL        (MPU_RASR_C | MPU_RASR_B)
+#define MPU_ATTR_STRONGLY_ORDERED  0  /* TEX=000, C=0, B=0 */
+#define MPU_ATTR_DEVICE        (MPU_TEX(2))  /* TEX=010, C=0, B=0 */
 /* Common Memory Type Combinations (TEX[2:0], C, B) */
 #define MPU_ATTR_FLASH_ROM                                                     \
   (MPU_TEX(0) | MPU_RASR_C) /* TEX=000, C=1, B=0 - Normal, Non-cacheable */

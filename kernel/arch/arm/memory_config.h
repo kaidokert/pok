@@ -83,6 +83,10 @@ POK_STATIC_ASSERT((MPU_SUBREGION_ALIGNMENT & (MPU_SUBREGION_ALIGNMENT - 1)) ==
 #error "POK_SRAM_SIZE cannot be zero"
 #endif
 
+/* Validate that POK_SRAM_BASE + POK_SRAM_SIZE does not overflow 32-bit */
+#if ((POK_SRAM_BASE + POK_SRAM_SIZE) < POK_SRAM_BASE)
+#error "POK_SRAM_BASE + POK_SRAM_SIZE overflows 32-bit address space"
+#endif
 #if (POK_SRAM_BASE & (POK_MEMORY_ALIGNMENT - 1)) != 0
 #error "POK_SRAM_BASE must be aligned to POK_MEMORY_ALIGNMENT"
 #endif

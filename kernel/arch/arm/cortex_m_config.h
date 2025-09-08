@@ -108,8 +108,10 @@ static inline uint32_t cortex_m_clz_fallback(uint32_t x) {
 
 /* Compile-time check: alignment must not be zero (overflow protection) */
 #if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#define _Static_assert(cond, msg) \
+#define POK_STATIC_ASSERT(cond, msg) \
     typedef char static_assertion_##__LINE__[(cond) ? 1 : -1]
+#else
+#define POK_STATIC_ASSERT(cond, msg) _Static_assert(cond, msg)
 #endif
 _Static_assert(CORTEX_M_NVIC_VECTOR_TABLE_ALIGNMENT != 0,
                "Vector table alignment overflow - reduce NVIC vector count");

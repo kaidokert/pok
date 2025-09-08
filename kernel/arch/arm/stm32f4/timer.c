@@ -157,11 +157,12 @@ pok_ret_t pok_timer_init(void) {
   /* Set SysTick priority (lower than most ISRs, but above PendSV)
    * Priority 14 (PendSV=15 lowest, SVC=0 highest)
    * SysTick is in SHPR3 register, bits 31:24 */
-  *SCB_SHPR3 = (*SCB_SHPR3 & 0x00FFFFFF) | (14 << 28); /* SysTick priority 14 */
+  *SCB_SHPR3 = (*SCB_SHPR3 & 0x00FFFFFF) | (14u << 24); /* SysTick priority 14 */
+  /* Clear any pending SysTick before enabling to avoid spurious tick */
+  SCB_ICSR |= SCB_ICSR_PENDSTCLR;
 
   /* Configure SysTick: enable, interrupt, use processor clock */
-  SYSTICK_CSR =
-      SYSTICK_CSR_ENABLE | SYSTICK_CSR_TICKINT | SYSTICK_CSR_CLKSOURCE;
+  SYSTICK_CSR = SYSTICK_CSR_ENABLE | SYSTICK_CSR_TICKINT | SYSTICK_CSR_CLKSOURCE;
 
   /* Data Synchronization Barrier to ensure SysTick configuration completes */
   __asm volatile("dsb" : : : "memory");

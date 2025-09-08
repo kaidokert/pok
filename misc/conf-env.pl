@@ -322,21 +322,14 @@ my %colors =
          }
       }
 
-      # Fallback: Set based on available toolchains if no ARCH or unsupported ARCH
+      # Fallback: if no ARCH or unsupported, default to x86 (FreeBSD variant if applicable)
       if (!defined($ENV{'ARCH'})) {
-         # Default to x86 for backward compatibility
-         # Default to x86 for backward compatibility
-         if ($sys_kind =~ /FreeBSD/ ) {
+         if ($sys_kind =~ /FreeBSD/) {
             $makevars{'ELF_MODE'} = "elf_i386_fbsd";
          } else {
             $makevars{'ELF_MODE'} = "elf_i386";
          }
-            $makevars{'ELF_MODE'} = "armelf";
-         } elsif ($sys_kind =~ /FreeBSD/ ) {
-            $makevars{'ELF_MODE'} = "elf_i386_fbsd";
-         } else {
-            $makevars{'ELF_MODE'} = "elf_i386";
-         }
+      }
       }
       print $colors{"GREEN"}." ok\n".$colors{"STD"};
    }

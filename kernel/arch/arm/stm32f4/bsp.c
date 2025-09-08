@@ -248,7 +248,7 @@ pok_ret_t pok_stm32f4_clock_init(void) {
 
   /* Enable PWR clock in RCC */
   volatile uint32_t *RCC_APB1ENR =
-      (volatile uint32_t *)(STM32F4_RCC_BASE + 0x40);
+      (volatile uint32_t *)(RCC_BASE + 0x40);
   *RCC_APB1ENR |= (1 << 28); /* PWREN = 1 */
 
   /* Set VOS to Scale 1 (highest performance, required for 168MHz) */

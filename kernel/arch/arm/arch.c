@@ -291,10 +291,8 @@ __attribute__((noreturn)) void pok_division_by_zero_error(void) {
   volatile int result;
   /* Prevent compiler optimization by using inline assembly to ensure division
    * occurs with actual modified values */
-  __asm volatile("sdiv %0, %1, %2"
-                 : "=r"(result)
-                 : "r"(dividend), "r"(zero)
-                 : "memory");
+  /* Use portable division approach - compiler will generate appropriate code */
+  result = dividend / zero;
   (void)result;
 
   while (1) {

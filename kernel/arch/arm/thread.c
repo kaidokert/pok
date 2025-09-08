@@ -160,7 +160,7 @@ void pok_context_switch(uint32_t *old_sp, uint32_t new_sp) {
   /* Trigger PendSV exception to perform context switch
    * Use bit-specific write to avoid clearing other SCB_ICSR bits
    */
-  SCB_ICSR |= SCB_ICSR_PENDSVSET;
+ SCB_ICSR = SCB_ICSR_PENDSVSET;  /* write-1 to set PendSV pending */
 
   /* Memory barrier to ensure PendSV is triggered */
   __asm volatile("dsb; isb" ::: "memory");

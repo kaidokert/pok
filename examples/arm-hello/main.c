@@ -43,7 +43,7 @@ void thread2_job(void) {
 static inline void setup_thread_attributes(pok_thread_attr_t *attr,
                                            void (*func_ptr)(void)) {
   /* Safe function pointer to void* conversion via uintptr_t */
-  attr->entry = (void *)(uintptr_t)func_ptr;
+  attr->entry = func_ptr;
   attr->priority = 1;
   attr->stack_size = 2048;
   attr->processor_affinity = 0;
