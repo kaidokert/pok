@@ -91,33 +91,35 @@ static pok_bool_t mpu_regions_overlap_with_srd(uint32_t base1, uint32_t size1,
     return TRUE;
   }
 
+  /* Ensure bases are aligned to their region sizes, otherwise SRD math is
+   * invalid */
+  if (!mpu_is_aligned(base1, size1) || !mpu_is_aligned(base2, size2)) {
+    return TRUE; /* treat as overlapping for safety */
+  }
+
   /* For regions with subregions, check if any enabled subregions actually
    * overlap */
   uint32_t sub1_size = size1 / ARM_MPU_SUBREGION_COUNT;
   uint32_t sub2_size = size2 / ARM_MPU_SUBREGION_COUNT;
 
   for (int i = 0; i < ARM_MPU_SUBREGION_COUNT; i++) {
-    /* Skip disabled subregions */
-    if (srd1 & (1 << i))
-      continue;
-
+    if (srd1 & (1u << i))
+      continue; /* disabled subregion */
     uint32_t sub1_base = base1 + (i * sub1_size);
     uint32_t sub1_end = sub1_base + sub1_size;
 
     for (int j = 0; j < ARM_MPU_SUBREGION_COUNT; j++) {
-      if (srd2 & (1 << j))
+      if (srd2 & (1u << j))
         continue;
-
       uint32_t sub2_base = base2 + (j * sub2_size);
       uint32_t sub2_end = sub2_base + sub2_size;
 
       if ((sub1_base < sub2_end) && (sub2_base < sub1_end)) {
-        return TRUE; /* Enabled subregions overlap */
+        return TRUE;
       }
     }
   }
-
-  return FALSE; /* No enabled subregions overlap */
+  return FALSE;
 }
 
 /**

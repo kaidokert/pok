@@ -149,45 +149,32 @@ pok_ret_t pok_cons_init(void) {
   GPIOA_PUPDR &= ~((3u << (PA9_PIN_POS * 2)) | (3u << (PA10_PIN_POS * 2)));
   /* Enable pull-up on PA10 (RX); leave PA9 (TX) as no pull */
   GPIOA_PUPDR |= (GPIO_PUPD_UP << (PA10_PIN_POS * 2));
-  /* Configure USART1 baud rate */
-  /* For oversampling by 16: BRR = (mantissa << 4) + fraction */
-  /* USARTDIV = f_CK / (16 * baud_rate) */
-  uint32_t apb2_clock = APB2_FREQ_HZ; /* Use correct 84MHz APB2 clock */
+  /* USARTDIV = f_CK / (16 * baud_rate) for oversampling by 16 */
+  uint32_t apb2_clock = APB2_FREQ_HZ;
   uint32_t baud_rate = UART_BAUD_RATE;
 
-  /* Bounds checking for baud rate calculation */
-  if (baud_rate == 0) {
-    return POK_ERRNO_EINVAL; /* Avoid division by zero */
+  if (baud_rate == 0)
+    return POK_ERRNO_EINVAL;
+
+  /* Compute scaled by 16 with rounding: (f_CK + baud/2) / baud */
+  uint64_t div16 =
+      ((uint64_t)apb2_clock + (uint64_t)baud_rate / 2u) / (uint64_t)baud_rate;
+  if (div16 > UINT32_MAX)
+    return POK_ERRNO_EINVAL;
+
+  uint32_t mantissa = (uint32_t)(div16 / USART_OVERSAMPLING_FACTOR);
+  uint32_t fraction = (uint32_t)(div16 % USART_OVERSAMPLING_FACTOR);
+
+  /* Handle rounding overflow: if fraction == 16, increment mantissa and zero
+   * fraction */
+  if (fraction >= USART_OVERSAMPLING_FACTOR) {
+    mantissa += 1u;
+    fraction = 0u;
   }
+  if (mantissa > 0xFFFu)
+    return POK_ERRNO_EINVAL;
 
-  /* Use 64-bit arithmetic with canonical rounding to prevent overflow */
-  /* Simplified: (apb2_clock * 16) / (16 * baud_rate) = apb2_clock / baud_rate
-   */
-  uint64_t numerator_64 = (uint64_t)apb2_clock;
-  uint64_t denominator_64 = (uint64_t)baud_rate;
-
-  /* Add half the denominator for proper rounding (canonical method) */
-  uint64_t usartdiv_scaled_64 =
-      (numerator_64 + denominator_64 / 2) / denominator_64;
-
-  /* Validate result fits in 32-bit range */
-  if (usartdiv_scaled_64 > UINT32_MAX) {
-    return POK_ERRNO_EINVAL; /* Calculation result exceeds 32-bit range */
-  }
-
-  uint32_t usartdiv_scaled = (uint32_t)usartdiv_scaled_64;
-
-  /* Extract mantissa (integer part) and fraction (4-bit fractional part) */
-  uint32_t mantissa = usartdiv_scaled / USART_OVERSAMPLING_FACTOR;
-  uint32_t fraction = usartdiv_scaled % USART_OVERSAMPLING_FACTOR;
-
-  /* Validate that mantissa fits in 12 bits (STM32F4 BRR register limit) */
-  if (mantissa > 0xFFF) {
-    return POK_ERRNO_EINVAL; /* Baud rate too low for this clock frequency */
-  }
-
-  /* Pack into BRR register format: mantissa[15:4] | fraction[3:0] */
-  USART1_BRR = (mantissa << 4) | (fraction & 0x0F);
+  USART1_BRR = (mantissa << 4) | (fraction & 0x0Fu);
 
   /* Enable USART, transmitter, and receiver */
   USART1_CR1 = USART_CR1_UE | USART_CR1_TE | USART_CR1_RE;

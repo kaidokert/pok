@@ -93,36 +93,22 @@ uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
    *
    * PSP should point to hardware frame (r0) for proper exception return
    */
-  uint32_t initial_psp =
-      (uint32_t)(uintptr_t)&sp->ctx.r0; /* Points to start of hardware frame */
+  /* Initial PSP points to start of hardware frame (r0) */
+  uint32_t initial_psp = (uint32_t)(uintptr_t)&sp->ctx.r0;
 
-  /* Verify that hardware frame fits within stack bounds
-   * Check for overflow in frame_end calculation first */
-  uint32_t frame_size = 8 * sizeof(uint32_t);
-  uint32_t stack_end = (uint32_t)(uintptr_t)stack_addr + stack_size;
+  /* Bounds: ensure software frame [r4-r11] and hardware frame [r0..xpsr] fit */
+  uint32_t stack_base = (uint32_t)(uintptr_t)stack_addr;
+  uint32_t stack_limit = stack_base + stack_size;
+  uint32_t hw_frame_end = initial_psp + (8U * sizeof(uint32_t)); /* past xpsr */
+  uint32_t sw_frame_start = (uint32_t)(uintptr_t)&sp->ctx.r4; /* lowest addr */
 
-  /* Check for overflow in frame_end calculation */
-  if (initial_psp > UINT32_MAX - frame_size) {
+  if (sw_frame_start < stack_base || hw_frame_end > stack_limit) {
 #ifdef POK_NEEDS_DEBUG
-    printf("Error: frame_end calculation would overflow (PSP=0x%08x)\n",
-           initial_psp);
+    printf("Error: context frames out of stack bounds [0x%08x, 0x%08x)\n",
+           stack_base, stack_limit);
 #endif
     pok_bsp_mem_free(stack_addr, stack_size);
     return 0;
-  }
-
-  uint32_t frame_end = initial_psp + frame_size;
-  if (frame_end > stack_end) {
-#ifdef POK_NEEDS_DEBUG
-    printf(
-        "Error: hardware frame extends beyond stack bounds [0x%08x, 0x%08x)\n",
-        (uint32_t)(uintptr_t)stack_addr,
-        (uint32_t)(uintptr_t)stack_addr + stack_size);
-#endif
-    pok_bsp_mem_free(
-        stack_addr,
-        stack_size); /* Free allocated memory on validation failure */
-    return 0;        /* Fail context creation instead of masking error */
   }
 
   /* PSP management is handled externally - context structure only contains

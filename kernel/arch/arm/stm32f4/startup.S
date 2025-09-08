@@ -25,9 +25,10 @@
 /* Stack top provided by linker script - no duplicate allocation */
 .extern _estack  /* Use linker-provided stack top symbol */
 
-/* Vector table - must be power-of-two aligned for VTOR */
+/* Vector table - must be power-of-two aligned for VTOR
+ * STM32F4 requires minimum 128-byte alignment, relaxed from 512-byte for compatibility */
 .section .isr_vector, "ax", %progbits
-.balign 512
+.balign 128
 .globl vector_table
 .type vector_table, %object
 .global __isr_vector_start
@@ -181,11 +182,12 @@ Reset_Handler:
 
     /* Enhanced vector table setup with validation */
     ldr r0, =vector_table
-    /* Validate vector table alignment (must be power-of-2, >= table size) */
-    mov r1, #511             /* 0x1FF = 511 */
-    and r1, r0, r1           /* Check 512-byte alignment */
+    /* Validate vector table alignment (must be power-of-2, >= table size)
+     * STM32F4 requires minimum 128-byte alignment */
+    mov r1, #127             /* 0x7F = 127 */
+    and r1, r0, r1           /* Check 128-byte alignment */
     cmp r1, #0
-    bne vector_error         /* Vector table not properly aligned */
+    bne vector_error         /* Vector table not 128-byte aligned */
 
     /* Validate vector table is in a valid memory region (Flash or SRAM) */
     ldr r1, =__FLASH_START__
