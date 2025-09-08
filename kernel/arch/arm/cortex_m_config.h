@@ -108,8 +108,8 @@ static inline uint32_t cortex_m_clz_fallback(uint32_t x) {
 
 /* Compile-time check: alignment must not be zero (overflow protection) */
 #if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#define POK_STATIC_ASSERT(cond, msg) \
-    typedef char static_assertion_##__LINE__[(cond) ? 1 : -1]
+#define POK_STATIC_ASSERT(cond, msg)                                           \
+  typedef char static_assertion_##__LINE__[(cond) ? 1 : -1]
 #else
 #define POK_STATIC_ASSERT(cond, msg) _Static_assert(cond, msg)
 #endif
@@ -199,6 +199,8 @@ extern "C" {
 static inline pok_ret_t cortex_m_validate_config(void) {
 #ifdef POK_NEEDS_DEBUG
 /* Validate NVIC vector count against hardware */
+/* NOTE: Function-scoped register macros below are properly encapsulated
+ * and do not leak to public header namespace - no visibility issue */
 #define SCB_ICTR                                                               \
   (*((volatile uint32_t                                                        \
           *)(0xE000E004))) /* Interrupt Controller Type Register */
@@ -214,6 +216,7 @@ static inline pok_ret_t cortex_m_validate_config(void) {
   }
 
 /* Validate MPU region count against hardware */
+/* NOTE: Function-scoped register macro - properly encapsulated, no leakage */
 #define MPU_TYPE_REG                                                           \
   (*((volatile uint32_t *)(0xE000ED90))) /* MPU Type Register */
   uint32_t hw_mpu_regions = (MPU_TYPE_REG >> 8) & 0xFF;

@@ -15,7 +15,7 @@ LO_OBJS=	arch.o \
 		timer.o
 
 ifdef BSP
-LO_DEPS=	$(BSP)/$(BSP).lo
+LO_DEPS=	$(OBJ_DIR)/$(BSP)/$(BSP).lo
 endif
 
 include $(TOPDIR)/misc/mk/objdir.mk

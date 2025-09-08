@@ -29,7 +29,7 @@
 #include "arch.h"
 #include "mpu.h"
 #include "nvic.h"
-#include "stm32f4/peripherals.h"
+/* BSP abstraction - no direct BSP includes in arch layer */
 
 /* ARM Cortex-M intrinsics */
 #ifdef __ARM_ARCH
@@ -39,30 +39,21 @@
 /* External declarations */
 extern uint8_t pok_current_partition;
 
-/* STM32F4 USART1 registers for non-blocking fault output */
-#define USART1_SR (*((volatile uint32_t *)(USART1_BASE + 0x00)))
-#define USART1_DR (*((volatile uint32_t *)(USART1_BASE + 0x04)))
-#define USART_SR_TXE (1 << 7) /* Transmit data register empty */
-#define USART_SR_PE (1 << 0)  /* Parity error */
-#define USART_SR_FE (1 << 1)  /* Framing error */
-#define USART_SR_ORE (1 << 3) /* Overrun error */
+/* BSP abstraction for fault output - BSP layer provides implementation */
+extern void (*pok_bsp_fault_putchar)(char c);
 
-/* Non-blocking fault output functions with basic error handling */
+/* BSP abstraction for memory ranges - BSP layer provides these */
+extern uint32_t pok_bsp_flash_base;
+extern uint32_t pok_bsp_flash_size;
+
+/* Architecture-layer fault output using BSP abstraction */
 static inline void fault_putc(char c) {
-  volatile uint32_t status = USART1_SR;
-
-  /* Check for UART errors - clear them but continue trying to output */
-  if (status & (USART_SR_PE | USART_SR_FE | USART_SR_ORE)) {
-    /* Clear error flags by reading SR then DR (hardware requirement) */
-    (void)USART1_DR;
+  /* Use BSP-provided fault output function if available */
+  if (pok_bsp_fault_putchar != NULL) {
+    pok_bsp_fault_putchar(c);
   }
-
-  /* Try to output character without blocking if transmitter is ready */
-  if (status & USART_SR_TXE) {
-    USART1_DR = c;
-  }
-  /* If UART not ready, we silently drop the character - fault context
-   * requires non-blocking operation for system stability */
+  /* If BSP doesn't provide fault output, silently drop character
+   * Fault context requires non-blocking operation for system stability */
 }
 
 static void fault_puts(const char *s) {
@@ -128,7 +119,8 @@ static void HardFault_Handler_C(uint32_t *frame);
  * Determines correct stack pointer (MSP vs PSP) based on EXC_RETURN
  */
 #define DEFINE_FAULT_HANDLER_WRAPPER(handler_name, c_handler_name)             \
-  void __attribute__((naked)) handler_name(void) {                             \
+  void __attribute__((naked, noinline, no_instrument_function)) handler_name(  \
+      void) {                                                                  \
     __asm volatile(                                                            \
         "tst lr, #4                 \n" /* Test EXC_RETURN[2] */               \
         "ite eq                     \n" /* If-Then-Else */                     \
@@ -408,8 +400,9 @@ static void UsageFault_Handler_C(uint32_t *frame) {
 
   /* Try to read instruction at PC (be careful with memory access) */
   uint32_t pc = frame[6] & ~1; /* Clear Thumb bit */
-  if (pc >= STM32F4_FLASH_BASE &&
-      pc < (STM32F4_FLASH_BASE + STM32F4_FLASH_SIZE)) { /* Within Flash range */
+  if (pok_bsp_flash_base != 0 && pok_bsp_flash_size != 0 &&
+      pc >= pok_bsp_flash_base &&
+      pc < (pok_bsp_flash_base + pok_bsp_flash_size)) { /* Within Flash range */
     uint16_t instruction = *((volatile uint16_t *)pc);
     fault_put_hex(instruction);
   } else {

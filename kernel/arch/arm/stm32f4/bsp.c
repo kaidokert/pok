@@ -46,6 +46,9 @@ pok_ret_t pok_cons_init(void);
 pok_ret_t pok_timer_init(void);
 pok_ret_t pok_stm32f4_clock_init(void);
 
+/* External linker symbols */
+extern unsigned int _estack; /* Linker-provided stack top symbol */
+
 /* Simple kernel memory allocator - allocates from kernel space for stacks, etc.
  */
 static uint32_t current_alloc_addr = POK_KERNEL_MEMORY_BASE;
@@ -247,8 +250,7 @@ pok_ret_t pok_stm32f4_clock_init(void) {
   volatile uint32_t *PWR_CR = (volatile uint32_t *)STM32F4_PWR_BASE;
 
   /* Enable PWR clock in RCC */
-  volatile uint32_t *RCC_APB1ENR =
-      (volatile uint32_t *)(RCC_BASE + 0x40);
+  volatile uint32_t *RCC_APB1ENR = (volatile uint32_t *)(RCC_BASE + 0x40);
   *RCC_APB1ENR |= (1 << 28); /* PWREN = 1 */
 
   /* Set VOS to Scale 1 (highest performance, required for 168MHz) */
@@ -350,7 +352,6 @@ void pok_bsp_debug_monitor(void) {
   printf("  Kernel allocator: next=0x%08x\n", current_alloc_addr);
 
   /* Stack status */
-  extern unsigned int _estack;
   unsigned int current_sp;
   __asm volatile("mov %0, sp" : "=r"(current_sp));
   printf("Stack info:\n");
@@ -361,3 +362,38 @@ void pok_bsp_debug_monitor(void) {
   printf("=== END BSP MONITOR ===\n");
 #endif
 }
+
+/* ========================================================================
+ * BSP ABSTRACTION IMPLEMENTATION for Architecture Layer
+ * ======================================================================== */
+
+/* BSP-provided memory ranges for architecture layer */
+uint32_t pok_bsp_flash_base = STM32F4_FLASH_BASE;
+uint32_t pok_bsp_flash_size = STM32F4_FLASH_SIZE;
+
+/* BSP-provided fault output function for architecture layer */
+static void stm32f4_fault_putchar(char c) {
+  /* STM32F4 USART1 registers for non-blocking fault output */
+  volatile uint32_t *usart1_sr =
+      (volatile uint32_t *)(STM32F4_USART1_BASE + 0x00);
+  volatile uint32_t *usart1_dr =
+      (volatile uint32_t *)(STM32F4_USART1_BASE + 0x04);
+
+  uint32_t status = *usart1_sr;
+
+  /* Check for UART errors - clear them but continue trying to output */
+  if (status & ((1 << 0) | (1 << 1) | (1 << 3))) { /* PE | FE | ORE */
+    /* Clear error flags by reading SR then DR (hardware requirement) */
+    (void)*usart1_dr;
+  }
+
+  /* Try to output character without blocking if transmitter is ready */
+  if (status & (1 << 7)) { /* TXE - Transmit data register empty */
+    *usart1_dr = c;
+  }
+  /* If UART not ready, we silently drop the character - fault context
+   * requires non-blocking operation for system stability */
+}
+
+/* BSP abstraction function pointer - set during BSP initialization */
+void (*pok_bsp_fault_putchar)(char c) = stm32f4_fault_putchar;

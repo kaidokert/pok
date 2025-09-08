@@ -23,8 +23,8 @@
 #define __POK_BSP_H__
 
 #include <errno.h>
-#include <types.h>
 #include <stdint.h>
+#include <types.h>
 pok_ret_t pok_bsp_init(void);
 
 pok_ret_t pok_bsp_irq_acknowledge(uint8_t irq);
@@ -41,7 +41,7 @@ size_t pok_bsp_kernel_size(void);
 
 pok_ret_t pok_bsp_time_init(void);
 
-pok_bool_t pok_cons_write(const char *s, size_t length);
+pok_ret_t pok_cons_write(const char *s, size_t length);
 pok_ret_t pok_cons_read(char *s, size_t length);
 
 void pok_cons_get_char(char *c);

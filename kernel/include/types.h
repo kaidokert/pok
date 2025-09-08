@@ -17,7 +17,7 @@
 
 #if defined(POK_ARCH_SPARC)
 #include <arch/sparc/types.h>
-#elif defined(POK_ARCH_ARM) || defined(POK_ARCH_CORTEX_M)
+#elif defined(POK_ARCH_ARM)
 #include <arch/arm/types.h>
 #elif defined(POK_ARCH_X86)
 #include <arch/x86/types.h>

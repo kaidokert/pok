@@ -21,11 +21,14 @@
 
 /* POK system headers */
 #include <errno.h>
-#include <libc.h>
+#ifdef POK_NEEDS_DEBUG
+#include <libc.h> /* For printf in debug builds */
+#endif
 
 /* Architecture-specific headers */
 #include "arch.h"
 #include "cortex_m_config.h"
+#include "memory_config.h"
 #include "nvic.h"
 #include "stm32f4/peripherals.h"
 
@@ -38,6 +41,9 @@
 /* Note: We get the ROM vector table location from VTOR instead of assuming
  * a fixed location, making this more robust across different memory layouts */
 extern unsigned int _estack;
+
+/* Default handler from startup.S */
+extern void Default_Handler(void);
 
 /* RAM-based vector table for runtime handler updates */
 #define NVIC_VECTOR_COUNT CORTEX_M_NVIC_VECTOR_COUNT
@@ -224,7 +230,6 @@ pok_ret_t pok_nvic_set_handler(uint8_t irq, void (*handler)(void)) {
   /* Allow NULL handler to restore default handler */
   if (handler == NULL) {
     /* Use Default_Handler from startup.S as the default handler */
-    extern void Default_Handler(void);
     handler = Default_Handler;
   }
 

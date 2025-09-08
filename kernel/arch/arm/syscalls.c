@@ -27,6 +27,10 @@
 #include <core/partition.h>
 #include <core/syscall.h>
 
+/* Constants for context switching */
+#define CORTEX_M_SOFTWARE_FRAME_SIZE                                           \
+  32 /* Size of r4-r11 saved by software (8 * 4 bytes) */
+
 /* Architecture-specific headers */
 #include "arch.h"
 #include "mpu.h"
@@ -177,7 +181,7 @@ syscall_exit:
  * SVC Handler - naked wrapper that determines stack pointer and calls
  * implementation
  */
-void __attribute__((naked)) SVC_Handler(void) {
+void __attribute__((naked, no_instrument_function)) SVC_Handler(void) {
   __asm volatile(
       /* Determine which stack pointer to use based on EXC_RETURN */
       "tst lr, #4                 \n" /* Test EXC_RETURN[2] for stack pointer */
@@ -202,7 +206,7 @@ void __attribute__((naked)) SVC_Handler(void) {
  * NOTE: FPU context not saved since build uses -mfloat-abi=soft
  * All floating point operations are handled by software libraries
  */
-void __attribute__((naked)) PendSV_Handler(void) {
+void __attribute__((naked, no_instrument_function)) PendSV_Handler(void) {
   extern uint32_t *g_old_sp_ptr;
   extern uint32_t g_new_sp;
 
@@ -221,7 +225,7 @@ void __attribute__((naked)) PendSV_Handler(void) {
       "cbz r1, 1f                 \n" /* Skip if NULL */
       /* CRITICAL FIX: Store PSP pointing to hardware frame, not after software
          regs */
-      "add r3, r0, #32            \n" /* r3 = r0 + 32 (point to hardware frame)
+      "add r3, r0, #32            \n" /* r3 = r0 + CORTEX_M_SOFTWARE_FRAME_SIZE
                                        */
       "str r3, [r1]               \n" /* Store corrected PSP value into thread
                                          struct */
@@ -234,24 +238,25 @@ void __attribute__((naked)) PendSV_Handler(void) {
 
       /* CRITICAL FIX: Adjust PSP to point to software-saved registers for
          restoration */
-      "sub r0, r0, #32            \n" /* r0 = r0 - 32 (point to software regs)
+      "sub r0, r0, #32            \n" /* r0 = r0 - CORTEX_M_SOFTWARE_FRAME_SIZE
                                        */
-      "ldmia r0!, {r4-r11}        \n" /* Restore r4-r11, r0 now points to
-                                         hardware frame */
-      "msr psp, r0                \n" /* Set PSP to hardware frame for exception
-                                         return */
+          * /
+          "ldmia r0!, {r4-r11}        \n" /* Restore r4-r11, r0 now points to
+                                             hardware frame */
+          "msr psp, r0                \n" /* Set PSP to hardware frame for
+                                             exception return */
 
-      /* Clear g_new_sp to prevent stale reuse */
-      "movs r3, #0                \n"
-      "str r3, [r2]               \n"
+          /* Clear g_new_sp to prevent stale reuse */
+          "movs r3, #0                \n"
+          "str r3, [r2]               \n"
 
-      /* Ensure memory ops complete before return */
-      "dsb                        \n"
-      "isb                        \n"
+          /* Ensure memory ops complete before return */
+          "dsb                        \n"
+          "isb                        \n"
 
-      "3:                         \n"
-      /* Return with original EXC_RETURN value preserved in LR */
-      "bx lr                      \n" /* Return from exception */
+          "3:                         \n"
+          /* Return with original EXC_RETURN value preserved in LR */
+          "bx lr                      \n" /* Return from exception */
 
       :
       :

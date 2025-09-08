@@ -146,6 +146,13 @@ vector_table:
 __isr_vector_end:
 .size vector_table, __isr_vector_end - vector_table
 
+/* Compile-time verification: ensure vector table size matches expected count
+ * STM32F4 has 16 system vectors + 91 external IRQs = 107 total vectors
+ * Each vector is 4 bytes, so total size should be 428 bytes */
+.if (__isr_vector_end - __isr_vector_start) != (107 * 4)
+.error "Vector table size mismatch: expected 107 vectors (428 bytes)"
+.endif
+
 .text
 .thumb
 .align 2

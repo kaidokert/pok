@@ -41,6 +41,9 @@
 
 #define MPU_MIN_REGION_SIZE CORTEX_M_MPU_MIN_REGION_SIZE
 
+/* Maximum alignable size - prevents overflow in power-of-2 calculations */
+#define MPU_MAX_ALIGNABLE_SIZE 0x80000000U
+
 /**
  * Round up size to next power of 2, with minimum of MPU_MIN_REGION_SIZE
  *
@@ -52,8 +55,9 @@ static inline uint32_t mpu_align_size_to_power_of_2(uint32_t size) {
     return MPU_MIN_REGION_SIZE;
   }
 
-  /* Check for overflow - sizes > 0x80000000 would violate round-up semantics */
-  if (size > 0x80000000U) {
+  /* Check for overflow - sizes > MPU_MAX_ALIGNABLE_SIZE would violate round-up
+   * semantics */
+  if (size > MPU_MAX_ALIGNABLE_SIZE) {
     return 0; /* Signal error: cannot round up without overflow */
   }
 
@@ -62,7 +66,11 @@ static inline uint32_t mpu_align_size_to_power_of_2(uint32_t size) {
     return size; /* Already power of 2 */
   }
 
-  /* Round up to next power of 2 using portable count leading zeros */
+  /* Round up to next power of 2 using portable count leading zeros
+   * NOTE: size=1 case is safely handled by early returns above:
+   * - size <= MPU_MIN_REGION_SIZE returns at line 54-56
+   * - size=1 is power of 2, returns at line 64-66
+   * Therefore size-1 >= 1 when reaching this point, avoiding CLZ(0) */
   uint32_t clz_result = CORTEX_M_CLZ_IMPL(size - 1);
   /* Ensure shift amount is valid (< 32) to prevent undefined behavior */
   if (clz_result >= 32) {
@@ -95,7 +103,7 @@ static inline pok_bool_t mpu_is_aligned(uint32_t addr, uint32_t size) {
   }
 
   /* Protect against size overflow when subtracting 1 */
-  if (size > 0x80000000U) {
+  if (size > MPU_MAX_ALIGNABLE_SIZE) {
     return FALSE; /* Size too large for safe alignment check */
   }
 

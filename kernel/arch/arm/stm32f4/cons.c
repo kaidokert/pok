@@ -195,9 +195,9 @@ pok_ret_t pok_cons_init(void) {
   return POK_ERRNO_OK;
 }
 
-pok_bool_t pok_cons_write(const char *s, size_t length) {
+pok_ret_t pok_cons_write(const char *s, size_t length) {
   if (s == NULL) {
-    return FALSE;
+    return POK_ERRNO_EINVAL;
   }
 
   for (size_t i = 0; i < length; i++) {
@@ -226,7 +226,7 @@ pok_bool_t pok_cons_write(const char *s, size_t length) {
      * timeout, data likely sent */
   }
 
-  return TRUE;
+  return POK_ERRNO_OK;
 }
 
 pok_ret_t pok_cons_read(char *s, size_t length) {

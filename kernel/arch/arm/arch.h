@@ -59,6 +59,7 @@
 #endif
 
 /* Validate ARM_PRIORITY_BITS is within valid range */
+/* Validate ARM_PRIORITY_BITS is in valid range for safe mask calculation */
 #if ARM_PRIORITY_BITS < 2 || ARM_PRIORITY_BITS > 8
 #error "ARM_PRIORITY_BITS must be between 2 and 8 inclusive"
 #endif

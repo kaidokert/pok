@@ -196,10 +196,12 @@ uint32_t pok_thread_stack_addr(const uint8_t partition_id,
   uint32_t partition_size = pok_partitions[partition_id].size;
   uint32_t partition_base = pok_partitions[partition_id].base_addr;
 
-  /* Check for invalid partition configuration */
-  if (partition_size == 0 || partition_base == 0) {
+  /* Check for invalid partition configuration - size must be non-zero */
+  if (partition_size == 0) {
     return POK_INVALID_STACK_ADDRESS; /* Partition not properly initialized */
   }
+  /* Note: partition_base can be 0 for partitions at address 0x0 (e.g., boot
+   * ROM) */
 
   /* Check for partition_base + partition_size overflow */
   if (partition_base > (UINT32_MAX - partition_size)) {
@@ -291,7 +293,12 @@ __attribute__((noreturn)) void pok_division_by_zero_error(void) {
   volatile int result;
   /* Prevent compiler optimization by using inline assembly to ensure division
    * occurs with actual modified values */
-  /* Use portable division approach - compiler will generate appropriate code */
+  /* ARCHITECTURAL DESIGN DECISION: Use portable C division operator
+   * - ARMv7-M cores (Cortex-M3/M4/M7): Compiler generates 'sdiv' instruction
+   * - ARMv6-M cores (Cortex-M0/M0+): Compiler generates software division
+   * library call This ensures compatibility across all Cortex-M variants while
+   * still triggering division-by-zero detection on cores with DIV_0_TRP
+   * capability. */
   result = dividend / zero;
   (void)result;
 

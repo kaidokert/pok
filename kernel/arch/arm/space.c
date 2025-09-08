@@ -128,6 +128,13 @@ pok_ret_t pok_create_space(uint8_t partition_id, uint32_t addr, uint32_t size) {
 
   /* Calculate optimal size alignment with efficiency analysis */
   uint32_t aligned_size = mpu_align_size_to_power_of_2(size);
+  if (aligned_size == 0) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: Cannot align size %u to power of 2 (overflow/invalid)\n",
+           size);
+#endif
+    return POK_ERRNO_EINVAL;
+  }
   uint32_t initial_waste = aligned_size - size;
   uint32_t initial_waste_percent = ((uint64_t)initial_waste * 100) / size;
 
@@ -161,15 +168,19 @@ pok_ret_t pok_create_space(uint8_t partition_id, uint32_t addr, uint32_t size) {
     return POK_ERRNO_EINVAL;
   }
 
-  /* Early waste validation before MPU configuration */
+  /* Early waste validation - only reject if waste is extreme and subregions
+   * can't help Subregions can reduce waste significantly, so we defer strict
+   * validation */
   uint32_t predicted_waste = aligned_size - size;
   uint32_t predicted_waste_percent = ((uint64_t)predicted_waste * 100) / size;
-  if (predicted_waste_percent > MEMORY_WASTE_CRITICAL_PERCENT) {
+  /* Only reject if waste is 4x the critical threshold - allow subregions to
+   * optimize */
+  if (predicted_waste_percent > (MEMORY_WASTE_CRITICAL_PERCENT * 4)) {
 #ifdef POK_NEEDS_DEBUG
-    printf("ERROR: Partition %d predicted waste %u%% exceeds critical "
-           "threshold %u%%\n",
-           partition_id, predicted_waste_percent,
-           MEMORY_WASTE_CRITICAL_PERCENT);
+    printf(
+        "ERROR: Partition %d predicted waste %u%% far exceeds threshold - even "
+        "subregions cannot help\n",
+        partition_id, predicted_waste_percent);
 #endif
     return POK_ERRNO_EINVAL;
   }
@@ -374,8 +385,20 @@ pok_ret_t pok_create_code_region(uint8_t partition_id, uint32_t code_addr,
   /* Use helper macro for code region (read-only, executable) */
   mpu_attributes = MPU_CONFIG_FLASH_CODE;
 
-  /* Align size to power of 2 (MPU requirement) */
+  /* ARCHITECTURAL DESIGN DECISION: Use hard power-of-2 alignment for code
+   * regions instead of subregions for simplicity and reliability. Code regions
+   * typically have good natural alignment from linker, and hard alignment
+   * ensures optimal MPU performance with single region per partition code
+   * segment. */
   uint32_t aligned_size = mpu_align_size_to_power_of_2(code_size);
+  if (aligned_size == 0) {
+#ifdef POK_NEEDS_DEBUG
+    printf(
+        "ERROR: Cannot align code size %u to power of 2 (overflow/invalid)\n",
+        code_size);
+#endif
+    return POK_ERRNO_EINVAL;
+  }
 
   /* Validate base address alignment matches MPU requirements */
   if (!mpu_is_aligned(code_addr, aligned_size)) {

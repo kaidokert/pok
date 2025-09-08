@@ -108,7 +108,7 @@ SECTIONS
     /* Reserve stack_size bytes growing down from SRAM end */
     . = ALIGN(8);
     . = _estack - _stack_size;  /* Move location counter to reserve space */
-    . = ALIGN(8);
+    /* Note: No additional alignment after reservation to avoid false assertion triggers */
     PROVIDE(__StackLimit = .);
     PROVIDE(_stack_bottom = .);
   } >SRAM

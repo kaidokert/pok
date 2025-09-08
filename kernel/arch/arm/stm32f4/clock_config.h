@@ -15,6 +15,11 @@
 #ifndef __POK_STM32F4_CLOCK_CONFIG_H__
 #define __POK_STM32F4_CLOCK_CONFIG_H__
 
+/* ARCHITECTURAL DESIGN DECISION: Require C11 or newer for _Static_assert
+ * This eliminates potential conflicts with standard headers and ensures
+ * consistent static assertion behavior across the codebase. Modern toolchains
+ * (GCC 4.6+, Clang 3.0+) support C11 static assertions natively. */
+
 /**
  * \file    clock_config.h
  * \brief   STM32F4 clock configuration constants

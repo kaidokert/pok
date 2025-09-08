@@ -330,7 +330,6 @@ my %colors =
             $makevars{'ELF_MODE'} = "elf_i386";
          }
       }
-      }
       print $colors{"GREEN"}." ok\n".$colors{"STD"};
    }
 
