@@ -168,8 +168,8 @@ static void MemManage_Handler_C(uint32_t *frame) {
   }
 
   /* Clear MemManage fault flags in CFSR using write-1-to-clear semantics
-   * Write 1s to the fault bits that were set to clear them
-   * ARM_CFSR_MMFSR_MASK is defined in arch.h as 0xFFu */
+   * Only clear the MMFSR bits that are actually set to avoid affecting
+   * BFSR/UFSR ARM_CFSR_MMFSR_MASK is defined in arch.h as 0xFFu */
   SCB_CFSR = cfsr & ARM_CFSR_MMFSR_MASK; /* Write 1s to clear set MMFSR bits */
 
   /* Get current partition */
@@ -234,8 +234,24 @@ static void MemManage_Handler_C(uint32_t *frame) {
   fault_puts(", size=32 bytes\n");
 #endif
 
-  /* For safety-critical systems, halt immediately on memory faults
-   * instead of attempting complex recovery from fault context */
+  /* DESIGN DECISION: Hard-halt on memory faults for safety-critical systems
+   *
+   * This implementation prioritizes safety over availability by immediately
+   * halting the system on memory protection violations. This design choice
+   * is appropriate for safety-critical embedded systems because:
+   *
+   * 1. Memory faults often indicate serious bugs that could compromise safety
+   * 2. Attempting fault recovery in interrupt context is complex and risky
+   * 3. Hardware watchdog timers provide system-level recovery mechanism
+   * 4. Fail-safe behavior prevents potentially dangerous continued execution
+   *
+   * Alternative approaches (partition recovery, isolation) would be more
+   * suitable for general-purpose systems but add complexity and potential
+   * attack vectors in safety-critical contexts.
+   *
+   * For applications requiring different fault handling, this can be
+   * customized via conditional compilation or callback mechanisms.
+   */
 #ifdef POK_NEEDS_DEBUG
   fault_puts("FATAL: Memory protection violation in partition ");
   fault_put_dec(partition_id);
@@ -276,7 +292,9 @@ static void BusFault_Handler_C(uint32_t *frame) {
     fault_addr = *((volatile uint32_t *)(SCB_BASE + 0x38)); /* BFAR */
   }
 
-  /* Clear Bus fault flags in CFSR using write-1-to-clear semantics */
+  /* Clear Bus fault flags in CFSR using write-1-to-clear semantics
+   * Only clear the BFSR bits that are actually set to avoid affecting
+   * MMFSR/UFSR */
   SCB_CFSR = cfsr & ARM_CFSR_BFSR_MASK; /* Write 1s to clear set BFSR bits */
 
   partition_id = pok_current_partition;
@@ -319,8 +337,8 @@ static void BusFault_Handler_C(uint32_t *frame) {
   fault_puts("\n");
 #endif
 
-  /* Halt system immediately - safer than partition recovery from fault context
-   */
+  /* DESIGN DECISION: Hard-halt on bus faults (see MemManage handler for
+   * rationale) */
 #ifdef POK_NEEDS_DEBUG
   fault_puts("FATAL: Bus fault recovery disabled - System halted for safety\n");
 #endif
@@ -352,7 +370,9 @@ static void UsageFault_Handler_C(uint32_t *frame) {
   /* Read CFSR to check fault status */
   cfsr = SCB_CFSR;
 
-  /* Clear Usage fault flags in CFSR using write-1-to-clear semantics */
+  /* Clear Usage fault flags in CFSR using write-1-to-clear semantics
+   * Only clear the UFSR bits that are actually set to avoid affecting
+   * MMFSR/BFSR */
   SCB_CFSR = cfsr & ARM_CFSR_UFSR_MASK; /* Write 1s to clear set UFSR bits */
 
 #ifdef POK_NEEDS_DEBUG
@@ -387,8 +407,9 @@ static void UsageFault_Handler_C(uint32_t *frame) {
   fault_puts("\nInstruction at fault: ");
 
   /* Try to read instruction at PC (be careful with memory access) */
-  uint32_t pc = frame[6] & ~1;               /* Clear Thumb bit */
-  if (pc >= 0x08000000 && pc < 0x08100000) { /* Within Flash range */
+  uint32_t pc = frame[6] & ~1; /* Clear Thumb bit */
+  if (pc >= STM32F4_FLASH_BASE &&
+      pc < (STM32F4_FLASH_BASE + STM32F4_FLASH_SIZE)) { /* Within Flash range */
     uint16_t instruction = *((volatile uint16_t *)pc);
     fault_put_hex(instruction);
   } else {
@@ -397,8 +418,8 @@ static void UsageFault_Handler_C(uint32_t *frame) {
   fault_puts("\n");
 #endif
 
-  /* Halt system immediately - safer than partition recovery from fault context
-   */
+  /* DESIGN DECISION: Hard-halt on usage faults (see MemManage handler for
+   * rationale) */
 #ifdef POK_NEEDS_DEBUG
   fault_puts("FATAL: Usage fault in partition ");
   fault_put_dec(partition_id);

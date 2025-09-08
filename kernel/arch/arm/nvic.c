@@ -471,7 +471,7 @@ pok_ret_t pok_nvic_set_vector_table(uint32_t offset) {
                                  : (POK_SRAM_BASE + POK_SRAM_SIZE);
   uint32_t table_end = offset + NVIC_VECTOR_TABLE_SIZE;
 
-  if (table_end > region_end) {
+  if (table_end < offset || table_end > region_end) {
 #ifdef POK_NEEDS_DEBUG
     printf("ERROR: Vector table at 0x%x (size %u bytes) extends beyond %s "
            "region end (0x%x)\n",

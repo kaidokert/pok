@@ -213,9 +213,9 @@ Reset_Handler:
     /* Validate data section pointers */
     cmp r0, r1
     bhi data_error           /* sdata > edata (invalid) */
-    push {r4, lr}
+    push {r3-r5, lr}         /* Preserve registers clobbered by copy_data_safe */
     bl  copy_data_safe
-    pop {r4, lr}
+    pop {r3-r5, lr}
 
     /* Initialize BSS section with bounds checking */
     ldr r0, =_sbss

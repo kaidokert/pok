@@ -136,7 +136,10 @@ static pok_ret_t mpu_validate_no_overlap(uint8_t new_region_id,
       continue;
     }
 
-    /* Check for overlap considering SubRegion Disable (SRD) masks */
+    /* Check for overlap considering SubRegion Disable (SRD) masks
+     * POLICY: Currently prevents all overlaps for safety. Future enhancement
+     * could allow same-partition code-over-data overlaps for W^X enforcement
+     * (higher region numbers take priority in ARM MPU) */
     if (mpu_regions_overlap_with_srd(
             base_addr, size, 0x00, /* New region has no SRD */
             mpu_regions[i].base_addr, mpu_regions[i].size,
@@ -271,10 +274,13 @@ pok_ret_t pok_mpu_configure_region(uint8_t region, uint32_t base_addr,
   /* Select region */
   MPU_RNR = region;
 
+  /* Disable region first to prevent transient faults during reprogramming */
+  MPU_RASR = 0;
+
   /* Configure base address - region already selected via MPU_RNR */
   MPU_RBAR = (base_addr & MPU_RBAR_ADDR_MASK);
 
-  /* Configure attributes and size */
+  /* Configure attributes and size (with enable bit) */
   MPU_RASR = rasr;
 
   /* Data Synchronization Barrier */
@@ -402,10 +408,13 @@ pok_ret_t pok_mpu_configure_region_with_subregions(uint8_t region,
   /* Select region */
   MPU_RNR = region;
 
+  /* Disable region first to prevent transient faults during reprogramming */
+  MPU_RASR = 0;
+
   /* Configure base address - region already selected via MPU_RNR */
   MPU_RBAR = (base_addr & MPU_RBAR_ADDR_MASK);
 
-  /* Configure attributes, size, and subregion disable */
+  /* Configure attributes, size, and subregion disable (with enable bit) */
   MPU_RASR = rasr;
 
   /* Data Synchronization Barrier */

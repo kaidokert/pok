@@ -46,7 +46,7 @@
  * @return Context pointer on success, 0 on failure
  */
 uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
-                            uint32_t entry) {
+                            uintptr_t entry) {
   start_context_t *sp;
   char *stack_addr;
 

@@ -42,6 +42,34 @@
 #define PLL_P 2   /* 336MHz / 2 = 168MHz SYSCLK */
 #define PLL_Q 7   /* 336MHz / 7 = 48MHz for USB */
 
+/* PLL parameter validation per RM0090 */
+#define VCO_IN_FREQ (HSE_FREQ_HZ / PLL_M)   /* Input to VCO after M divider */
+#define VCO_OUT_FREQ (VCO_IN_FREQ * PLL_N)  /* VCO output frequency */
+#define PLL_USB_FREQ (VCO_OUT_FREQ / PLL_Q) /* USB clock frequency */
+
+/* Compile-time validation of PLL parameters */
+#if PLL_M < 2 || PLL_M > 63
+#error "PLL_M must be between 2 and 63"
+#endif
+#if PLL_N < 50 || PLL_N > 432
+#error "PLL_N must be between 50 and 432"
+#endif
+#if PLL_P != 2 && PLL_P != 4 && PLL_P != 6 && PLL_P != 8
+#error "PLL_P must be 2, 4, 6, or 8"
+#endif
+#if PLL_Q < 2 || PLL_Q > 15
+#error "PLL_Q must be between 2 and 15"
+#endif
+#if VCO_IN_FREQ < 1000000 || VCO_IN_FREQ > 2000000
+#error "VCO input frequency must be between 1-2 MHz"
+#endif
+#if VCO_OUT_FREQ < 100000000 || VCO_OUT_FREQ > 432000000
+#error "VCO output frequency must be between 100-432 MHz"
+#endif
+#if PLL_USB_FREQ != 48000000
+#error "USB clock must be exactly 48 MHz for USB compliance"
+#endif
+
 /* PLL register bit positions and values */
 /* Use CMSIS-provided bit positions when available; fall back otherwise */
 #ifndef RCC_PLLCFGR_PLLQ_Pos
@@ -109,7 +137,8 @@ _Static_assert(
 /* USB clock frequency (must be 48MHz) - calculated from PLL_Q */
 /* USB clock frequency (must be 48MHz) - calculated from PLL_Q */
 #define USB_FREQ_HZ ((HSE_FREQ_HZ / PLL_M) * PLL_N / PLL_Q)
-_Static_assert(USB_FREQ_HZ == 48000000, "USB clock must be exactly 48MHz for proper operation");
+_Static_assert(USB_FREQ_HZ == 48000000,
+               "USB clock must be exactly 48MHz for proper operation");
 
 /* Flash latency for 168MHz operation at 3.3V */
 #define FLASH_LATENCY 5 /* 5 wait states for 150-168MHz */

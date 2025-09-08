@@ -82,6 +82,10 @@ pok_ret_t pok_create_space(uint8_t partition_id, uint32_t addr, uint32_t size) {
   if (size == 0) {
     return POK_ERRNO_EINVAL; /* Zero size is invalid */
   }
+  /* Prevent wraparound of end address */
+  if (addr > UINT32_MAX - size) {
+    return POK_ERRNO_EINVAL; /* Prevent end overflow */
+  }
 
   /* Use partition_id + 1 as region ID (reserve region 0 for kernel) */
   region_id = partition_id + 1;
@@ -207,13 +211,25 @@ pok_ret_t pok_create_space(uint8_t partition_id, uint32_t addr, uint32_t size) {
   }
 
   if (!used_subregions) {
-    /* Use standard region configuration */
-    if (pok_mpu_configure_region(region_id, addr, aligned_size,
-                                 mpu_attributes) != POK_ERRNO_OK) {
-      return POK_ERRNO_EFAULT;
+    /* Require subregions for non-exact fits to avoid mapping outside partition
+     */
+    if (aligned_size != size) {
+      if (aligned_size >= ARM_MPU_MIN_SUBREGION_SIZE &&
+          pok_mpu_configure_region_with_subregions(
+              region_id, addr, size, aligned_size, mpu_attributes) ==
+              POK_ERRNO_OK) {
+        used_subregions = TRUE;
+        actual_exposed_memory = aligned_size - size; /* masked by SRD */
+      } else {
+        return POK_ERRNO_EINVAL; /* refuse unsafe overmap */
+      }
+    } else {
+      if (pok_mpu_configure_region(region_id, addr, aligned_size,
+                                   mpu_attributes) != POK_ERRNO_OK) {
+        return POK_ERRNO_EFAULT;
+      }
+      actual_exposed_memory = 0;
     }
-    /* Standard region exposes full aligned_size - size */
-    actual_exposed_memory = aligned_size - size;
   }
 
   /* Check waste after subregion masking */
@@ -367,6 +383,18 @@ pok_ret_t pok_create_code_region(uint8_t partition_id, uint32_t code_addr,
     printf(
         "ERROR: Partition %d code region addr 0x%x not aligned to size 0x%x\n",
         partition_id, code_addr, aligned_size);
+#endif
+    return POK_ERRNO_EINVAL;
+  }
+
+  /* Ensure the aligned region still fits entirely inside the partition */
+  if (aligned_size > spaces[partition_id].size ||
+      code_offset > spaces[partition_id].size - aligned_size) {
+#ifdef POK_NEEDS_DEBUG
+    printf("ERROR: Aligned code region [0x%x+%u) exceeds partition bounds "
+           "[0x%x-0x%x) for partition %d\n",
+           code_addr, aligned_size, partition_base,
+           partition_base + spaces[partition_id].size, partition_id);
 #endif
     return POK_ERRNO_EINVAL;
   }
@@ -526,7 +554,7 @@ uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,
   ctx = (context_t *)(sp_aligned - sizeof(context_t));
 
   /* Validate context frame is still within partition bounds */
-  if ((uint32_t)ctx < base || sizeof(context_t) > (end - (uint32_t)ctx)) {
+  if ((uint32_t)ctx < base || (uint32_t)ctx > end - sizeof(context_t)) {
 #ifdef POK_NEEDS_DEBUG
     printf("ERROR: Context frame outside partition bounds in partition %d\n",
            partition_id);
@@ -582,11 +610,11 @@ pok_ret_t pok_arch_space_init(void) {
   }
 
   /* Check for kernel base address alignment */
-  if (!mpu_is_aligned(kernel_base, MPU_MIN_REGION_SIZE)) {
+  if (!mpu_is_aligned(kernel_base, kernel_size)) {
 #ifdef POK_NEEDS_DEBUG
-    printf("ERROR: Kernel base address 0x%08X not aligned to minimum MPU size "
+    printf("ERROR: Kernel base address 0x%08X not aligned to kernel size "
            "%u\n",
-           kernel_base, MPU_MIN_REGION_SIZE);
+           kernel_base, kernel_size);
 #endif
     return POK_ERRNO_EINVAL;
   }

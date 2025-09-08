@@ -16,6 +16,7 @@
 #define __POK_ARM_THREAD_H__
 
 #include <stddef.h>
+#include <stdint.h>
 #include <types.h>
 
 /*
@@ -24,12 +25,15 @@
  * LAYOUT CRITICAL: Order must match PendSV handler in syscalls.c
  *
  * PendSV Handler Flow:
- * 1. mrs r0, psp              <- Get current PSP
+ * 1. mrs r0, psp              <- Get current PSP (points to hardware frame)
  * 2. stmdb r0!, {r4-r11}      <- Push r4-r11 onto thread stack
- * 3. Store r0 to old thread   <- r0 now points after saved r4-r11
- * 4. ldmia r0!, {r4-r11}      <- Pop r4-r11 from new thread stack
- * 5. msr psp, r0              <- Set PSP to point after r4-r11
- * 6. Hardware pops r0-r3,r12,lr,pc,xpsr from PSP stack on return
+ * 3. add r3, r0, #32          <- Adjust PSP before storing old thread pointer
+ * 4. Store r3 to old thread   <- Store PSP pointing to hardware frame
+ * 5. Load new thread pointer into r0 (points to hardware frame)
+ * 6. sub r0, r0, #32          <- Adjust PSP back to point to software regs
+ * 7. ldmia r0!, {r4-r11}      <- Pop r4-r11 from new thread stack
+ * 8. msr psp, r0              <- Set PSP to hardware frame for exception return
+ * 9. Hardware pops r0-r3,r12,lr,pc,xpsr from PSP stack on return
  */
 /* ARM Cortex-M context structure with proper alignment for PendSV context
  * switching CRITICAL: Structure must maintain 8-byte alignment for stack
@@ -89,13 +93,13 @@ _Static_assert(offsetof(context_t, xpsr) == 60, "xpsr must be at offset 60");
  */
 typedef struct __attribute__((aligned(8))) {
   context_t ctx;
-  uint32_t entry; /* Thread entry point */
-  uint32_t id;    /* Thread ID */
+  uintptr_t entry; /* Thread entry point */
+  uint32_t id;     /* Thread ID */
 } start_context_t;
 
 /* Function prototypes */
 uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
-                            uint32_t entry);
+                            uintptr_t entry);
 void pok_context_switch(uint32_t *old_sp, uint32_t new_sp);
 void pok_context_reset(uint32_t stack_size, uint32_t stack_addr);
 void pok_arch_thread_start(start_context_t *ctx);

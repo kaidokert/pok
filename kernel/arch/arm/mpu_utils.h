@@ -52,10 +52,9 @@ static inline uint32_t mpu_align_size_to_power_of_2(uint32_t size) {
     return MPU_MIN_REGION_SIZE;
   }
 
-  /* Check for overflow - sizes > 0x80000000 would overflow to undefined
-   * behavior */
+  /* Check for overflow - sizes > 0x80000000 would violate round-up semantics */
   if (size > 0x80000000U) {
-    return 0x80000000U; /* Return largest valid power of 2 for 32-bit */
+    return 0; /* Signal error: cannot round up without overflow */
   }
 
   /* Find next power of 2 using efficient builtin (O(1) vs O(log n)) */
@@ -67,7 +66,7 @@ static inline uint32_t mpu_align_size_to_power_of_2(uint32_t size) {
   uint32_t clz_result = CORTEX_M_CLZ_IMPL(size - 1);
   /* Ensure shift amount is valid (< 32) to prevent undefined behavior */
   if (clz_result >= 32) {
-    return 0x80000000U; /* Fallback to maximum valid power of 2 */
+    return 0; /* Signal error: invalid clz result */
   }
   return 1U << (32 - clz_result);
 }

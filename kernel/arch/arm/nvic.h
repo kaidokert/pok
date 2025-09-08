@@ -97,6 +97,10 @@
 /* Maximum external interrupt number - derived from vector count
  * Total vectors = 16 system + external IRQs, so max external IRQ = total - 16 -
  * 1 */
+#if CORTEX_M_NVIC_VECTOR_COUNT < 17
+#error                                                                         \
+    "CORTEX_M_NVIC_VECTOR_COUNT must be at least 17 (16 system + 1 external minimum)"
+#endif
 #define NVIC_MAX_IRQ (CORTEX_M_NVIC_VECTOR_COUNT - 16 - 1)
 
 /* Vector table entry */

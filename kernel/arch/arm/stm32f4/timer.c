@@ -154,6 +154,11 @@ pok_ret_t pok_timer_init(void) {
   /* Clear current value */
   SYSTICK_CVR = 0;
 
+  /* Set SysTick priority (lower than most ISRs, but above PendSV)
+   * Priority 14 (PendSV=15 lowest, SVC=0 highest)
+   * SysTick is in SHPR3 register, bits 31:24 */
+  *SCB_SHPR3 = (*SCB_SHPR3 & 0x00FFFFFF) | (14 << 28); /* SysTick priority 14 */
+
   /* Configure SysTick: enable, interrupt, use processor clock */
   SYSTICK_CSR =
       SYSTICK_CSR_ENABLE | SYSTICK_CSR_TICKINT | SYSTICK_CSR_CLKSOURCE;

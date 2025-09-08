@@ -29,10 +29,12 @@ _stack_size = 0x1000;  /* 4KB stack - sufficient for ISR nesting, printf, contex
 
 SECTIONS
 {
-  /* Vector table goes to flash - must be 0x200 (512) byte aligned for proper VTOR operation */
+  /* Vector table goes to flash - MUST start at exact Flash base address 0x08000000
+   * for proper CPU boot (initial SP and reset vector fetch) */
   .isr_vector :
   {
-    . = ALIGN(0x200);
+    . = ORIGIN(FLASH);  /* Force vector table to exact Flash start */
+    . = ALIGN(0x200);   /* Maintain required VTOR alignment */
     KEEP(*(.isr_vector))
     . = ALIGN(0x200);
   } >FLASH
@@ -98,16 +100,17 @@ SECTIONS
     /* Absorb .stack section from startup.S to prevent orphan */
     KEEP(*(.stack))
 
-    /* Reserve space for stack - grows downward from end of SRAM */
-    /* Ensure stack bottom is properly aligned */
-    . = ALIGN(8);
-    PROVIDE(__StackLimit = .);
-    PROVIDE(_stack_bottom = .);
-
-    /* Stack top symbols - must be at exact SRAM end */
+    /* Stack top at end of SRAM */
     _estack = ORIGIN(SRAM) + LENGTH(SRAM);
     PROVIDE(__StackTop = _estack);
     PROVIDE(_stack_top = _estack);
+
+    /* Reserve stack_size bytes growing down from SRAM end */
+    . = ALIGN(8);
+    . = _estack - _stack_size;  /* Move location counter to reserve space */
+    . = ALIGN(8);
+    PROVIDE(__StackLimit = .);
+    PROVIDE(_stack_bottom = .);
   } >SRAM
 
   /* Verify stack placement is correct */

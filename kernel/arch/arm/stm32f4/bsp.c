@@ -61,6 +61,9 @@ static uint32_t current_alloc_addr = POK_KERNEL_MEMORY_BASE;
 pok_ret_t pok_bsp_init(void) {
   pok_ret_t ret;
 
+  /* Reset kernel allocator for clean init (handles warm-boot/multiple calls) */
+  current_alloc_addr = POK_KERNEL_MEMORY_BASE;
+
   /* Initialize system clocks */
   ret = pok_stm32f4_clock_init();
   if (ret != POK_ERRNO_OK) {

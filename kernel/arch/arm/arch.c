@@ -25,6 +25,7 @@
 
 /* POK core headers */
 #include <arch.h>
+#include <core/deployment.h>
 #include <core/partition.h>
 #include <core/thread.h>
 

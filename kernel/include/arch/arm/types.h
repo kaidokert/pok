@@ -16,16 +16,28 @@
 #define __POK_ARM_TYPES_H__
 
 /* Standard integer types for ARM Cortex-M */
-/* Try to use system stdint.h first, fallback to our own definitions */
+/* Prefer system headers; fall back only if missing */
 #ifdef __has_include
 #if __has_include(<stdint.h>)
 #include <stdint.h>
+#define POK_HAVE_STDINT 1
 #endif
-#else
-/* Fallback: try standard include locations */
-#ifndef _STDINT_H_INCLUDED
+#if __has_include(<stddef.h>)
+#include <stddef.h>
+#define POK_HAVE_STDDEF 1
+#endif
+#endif
+/* Fallback path for compilers without __has_include */
+#ifndef POK_HAVE_STDINT
+#ifndef __has_include
 #include <stdint.h>
-#define _STDINT_H_INCLUDED
+#define POK_HAVE_STDINT 1
+#endif
+#endif
+#ifndef POK_HAVE_STDDEF
+#ifndef __has_include
+#include <stddef.h>
+#define POK_HAVE_STDDEF 1
 #endif
 #endif
 
@@ -49,8 +61,28 @@ typedef signed long long int64_t;
 #endif
 
 /* Pointer types for ARM Cortex-M (32-bit architecture) */
+/* size_t: prefer stddef.h; else compiler builtin; else 32-bit fallback */
+#ifndef POK_HAVE_STDDEF
+#ifdef __SIZE_TYPE__
+typedef __SIZE_TYPE__ size_t;
+#else
 typedef unsigned int size_t;
+#endif
+#endif
+
+/* uintptr_t/intptr_t: prefer stdint.h; else compiler builtins; else 32-bit
+ * fallbacks */
+#ifndef POK_HAVE_STDINT
+#ifdef __UINTPTR_TYPE__
+typedef __UINTPTR_TYPE__ uintptr_t;
+#else
 typedef unsigned int uintptr_t;
+#endif
+#ifdef __INTPTR_TYPE__
+typedef __INTPTR_TYPE__ intptr_t;
+#else
 typedef signed int intptr_t;
+#endif
+#endif
 
 #endif /* !__POK_ARM_TYPES_H__ */
