@@ -131,6 +131,10 @@ static pok_bool_t mpu_regions_overlap_with_srd(uint32_t base1, uint32_t size1,
  */
 static pok_bool_t is_same_partition_regions(uint8_t region_id1,
                                             uint8_t region_id2) {
+  /* Validate region IDs are within available hardware regions */
+  if (region_id1 >= mpu_region_count || region_id2 >= mpu_region_count) {
+    return FALSE;
+  }
   /* Region 0 is kernel - never allow overlap with kernel */
   if (region_id1 == 0 || region_id2 == 0) {
     return FALSE;
@@ -192,8 +196,10 @@ static pok_bool_t is_valid_wx_overlap(uint8_t new_region_id,
 static pok_ret_t mpu_validate_no_overlap(uint8_t new_region_id,
                                          uint32_t base_addr, uint32_t size) {
   for (uint8_t i = 0; i < MPU_MAX_REGIONS; i++) {
-    /* Skip the region we're configuring and disabled regions */
-    if (i == new_region_id || !mpu_regions[i].enabled) {
+    /* Skip the region we're configuring and truly unconfigured regions
+     * Note: Check size == 0 instead of !enabled to include
+     * disabled-but-configured regions */
+    if (i == new_region_id || mpu_regions[i].size == 0) {
       continue;
     }
 

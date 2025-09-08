@@ -115,47 +115,58 @@ static inline pok_bool_t mpu_is_aligned(uint32_t addr, uint32_t size) {
  *
  * @param addr Address to align
  * @param alignment Alignment boundary (must be power of 2)
- * @return Aligned address, or 0 on overflow/invalid input
+ * @param out Pointer to store the aligned address
+ * @return TRUE on success, FALSE on overflow/invalid input
  */
-static inline uint32_t mpu_align_up(uint32_t addr, uint32_t alignment) {
+static inline pok_bool_t mpu_align_up(uint32_t addr, uint32_t alignment,
+                                      uint32_t *out) {
+  if (out == NULL)
+    return FALSE;
+
   /* Validate alignment parameter */
   if (alignment == 0 || !mpu_is_power_of_2(alignment)) {
-    return 0; /* Invalid alignment */
+    return FALSE;
   }
 
   /* Check for potential overflow before calculation
    * We add (alignment - 1) to addr, so check if addr > UINT32_MAX - (alignment
    * - 1) */
   if (addr > (UINT32_MAX - (alignment - 1))) {
-    return 0; /* Would overflow */
+    return FALSE;
   }
 
   uint32_t mask = alignment - 1;
   uint32_t aligned = (addr + mask) & ~mask;
 
   /* Double-check no overflow occurred */
-  if (aligned < addr) {
-    return 0; /* Overflow detected */
-  }
+  if (aligned < addr)
+    return FALSE;
 
-  return aligned;
+  *out = aligned;
+  return TRUE;
 }
 
 /**
- * Safely align address down to boundary with overflow protection
+ * Safely align address down to boundary
  *
  * @param addr Address to align
  * @param alignment Alignment boundary (must be power of 2)
- * @return Aligned address, or 0 on invalid input
+ * @param out Pointer to store the aligned address
+ * @return TRUE on success, FALSE on invalid input
  */
-static inline uint32_t mpu_align_down(uint32_t addr, uint32_t alignment) {
+static inline pok_bool_t mpu_align_down(uint32_t addr, uint32_t alignment,
+                                        uint32_t *out) {
+  if (out == NULL)
+    return FALSE;
+
   /* Validate alignment parameter */
   if (alignment == 0 || !mpu_is_power_of_2(alignment)) {
-    return 0; /* Invalid alignment */
+    return FALSE;
   }
 
   /* Safe to align down - no overflow possible */
-  return addr & ~(alignment - 1);
+  *out = addr & ~(alignment - 1);
+  return TRUE;
 }
 
 #endif /* !__POK_ARM_MPU_UTILS_H__ */

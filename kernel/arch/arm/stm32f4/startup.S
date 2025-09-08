@@ -28,7 +28,6 @@
 /* Vector table - must be power-of-two aligned for VTOR
  * STM32F4 requires minimum 128-byte alignment, relaxed from 512-byte for compatibility */
 .section .isr_vector, "ax", %progbits
-.balign 128
 .globl vector_table
 .type vector_table, %object
 .global __isr_vector_start

@@ -32,6 +32,7 @@
 /* Architecture-specific headers */
 #include "arch.h"
 #include "cortex_m_config.h"
+#include "memory_config.h"
 #include "nvic.h"
 #include "thread.h"
 
@@ -111,10 +112,8 @@ uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
   }
   stack_limit = stack_base + stack_size;
 
-  uint32_t hw_frame_end = initial_psp + (8U * sizeof(uint32_t)); /* past xpsr */
-  uint32_t sw_frame_start = (uint32_t)(uintptr_t)&sp->ctx.r4; /* lowest addr */
-
-  /* Additional hardening: check hw_frame_end calculation for overflow */
+  /* Validate that both software (r4-r11) and hardware (r0..xpsr) frames fit
+   * within the allocated stack */
   if (initial_psp > UINT32_MAX - (8U * sizeof(uint32_t))) {
 #ifdef POK_NEEDS_DEBUG
     printf("Error: hardware frame end calculation would overflow\n");
@@ -122,7 +121,11 @@ uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
     pok_bsp_mem_free(stack_addr, stack_size);
     return 0;
   }
-
+  uint32_t hw_frame_start = initial_psp;
+  uint32_t hw_frame_end = initial_psp + (8U * sizeof(uint32_t)); /* past xpsr */
+  uint32_t sw_frame_start =
+      hw_frame_start -
+      (8U * sizeof(uint32_t)); /* r4-r11 below hardware frame */
   if (sw_frame_start < stack_base || hw_frame_end > stack_limit) {
 #ifdef POK_NEEDS_DEBUG
     printf("Error: context frames out of stack bounds [0x%08x, 0x%08x)\n",
@@ -159,10 +162,19 @@ volatile uint32_t g_new_sp = 0;
  */
 void pok_context_switch(uint32_t *old_sp, uint32_t new_sp) {
   if (old_sp == NULL) {
-    /* Clear global variables to prevent stale values from affecting future
-     * context switches */
+    /* Clear global variables within interrupt-disabled region to prevent races
+     */
+    uint32_t primask;
+    __asm volatile("mrs %0, PRIMASK" : "=r"(primask)::"memory");
+    __asm volatile("cpsid i" ::: "memory");
+
     g_old_sp_ptr = NULL;
     g_new_sp = 0;
+
+    /* Restore previous interrupt state */
+    if ((primask & 0x1u) == 0) {
+      __asm volatile("cpsie i" ::: "memory");
+    }
     return;
   }
 
@@ -176,12 +188,12 @@ void pok_context_switch(uint32_t *old_sp, uint32_t new_sp) {
     return;
   }
 
-  /* Additional check: ensure new_sp is in reasonable memory range
-   * ARM Cortex-M typically uses 0x20000000+ for SRAM */
-  if (new_sp < 0x20000000 || new_sp >= 0x30000000) {
+  /* Additional check: ensure new_sp is in reasonable memory range */
+  if (new_sp < POK_SRAM_BASE || new_sp >= (POK_SRAM_BASE + POK_SRAM_SIZE)) {
 #ifdef POK_NEEDS_DEBUG
-    printf("Warning: suspicious stack pointer outside SRAM range: 0x%08x\n",
-           new_sp);
+    printf("Warning: suspicious stack pointer outside configured SRAM range "
+           "[0x%08x, 0x%08x): 0x%08x\n",
+           POK_SRAM_BASE, POK_SRAM_BASE + POK_SRAM_SIZE, new_sp);
 #endif
     /* Continue but log the warning - might be valid in some configurations */
   }
@@ -201,7 +213,7 @@ void pok_context_switch(uint32_t *old_sp, uint32_t new_sp) {
   /* Trigger PendSV exception to perform context switch
    * Use bit-specific write to avoid clearing other SCB_ICSR bits
    */
-  SCB_ICSR |= SCB_ICSR_PENDSVSET; /* write-1 to set PendSV pending */
+  *SCB_ICSR |= SCB_ICSR_PENDSVSET; /* write-1 to set PendSV pending */
 
   /* Memory barrier to ensure PendSV is triggered */
   __asm volatile("dsb; isb" ::: "memory");

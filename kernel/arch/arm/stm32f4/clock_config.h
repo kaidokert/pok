@@ -160,7 +160,6 @@ _Static_assert(
 #define SYSTICK_FREQ_HZ AHB_FREQ_HZ
 
 /* USB clock frequency (must be 48MHz) - calculated from PLL_Q */
-/* USB clock frequency (must be 48MHz) - calculated from PLL_Q */
 #define USB_FREQ_HZ ((HSE_FREQ_HZ / PLL_M) * PLL_N / PLL_Q)
 _Static_assert(USB_FREQ_HZ == 48000000,
                "USB clock must be exactly 48MHz for proper operation");

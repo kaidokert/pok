@@ -43,8 +43,13 @@
 #define ARM_CFSR_UFSR_MASK 0xFFFF0000u /* Usage Fault Status [31:16] */
 
 /* MPU Region Size Constants */
-#define ARM_MPU_MIN_SUBREGION_SIZE 256 /* Minimum size for subregions */
-#define ARM_MPU_SUBREGION_COUNT 8      /* Number of subregions per region */
+#define ARM_MPU_SUBREGION_COUNT 8 /* Number of subregions per region */
+#define ARM_MPU_MIN_REGION_WITH_SUBREGIONS                                     \
+  256u /* SRD field effective from 256B regions */
+#define ARM_MPU_MIN_SUBREGION_SIZE                                             \
+  32u /* 256B / 8 - minimum subregion granularity */
+/* Helper: size of one subregion for a given region size */
+#define ARM_MPU_SUBREGION_GRANULARITY(rs) ((rs) / ARM_MPU_SUBREGION_COUNT)
 
 /* SVC Instruction Encoding */
 #define ARM_SVC_NUMBER_MASK 0xFF /* SVC number in lower 8 bits */
@@ -58,7 +63,6 @@
 #endif
 #endif
 
-/* Validate ARM_PRIORITY_BITS is within valid range */
 /* Validate ARM_PRIORITY_BITS is in valid range for safe mask calculation */
 #if ARM_PRIORITY_BITS < 2 || ARM_PRIORITY_BITS > 8
 #error "ARM_PRIORITY_BITS must be between 2 and 8 inclusive"

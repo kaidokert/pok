@@ -79,7 +79,7 @@ static pok_ret_t pok_nvic_relocate_vector_table(void) {
   }
 
   /* Read VTOR directly as volatile */
-  uint32_t rom_table_addr = SCB_VTOR;
+  uint32_t rom_table_addr = *SCB_VTOR;
 
   /* Validate ROM table address is in valid memory region (Flash or SRAM) */
   pok_bool_t in_flash =
@@ -151,7 +151,7 @@ static pok_ret_t pok_nvic_relocate_vector_table(void) {
     return POK_ERRNO_EFAULT;
   }
 
-  SCB_VTOR = ram_table_addr;
+  *SCB_VTOR = ram_table_addr;
   vector_table_relocated = 1;
   __asm volatile("dsb" ::: "memory");
   __asm volatile("isb");
@@ -172,10 +172,10 @@ pok_ret_t pok_nvic_init(void) {
   }
 
   /* Enable division-by-zero trap to trigger UsageFault */
-  SCB_CCR |= SCB_CCR_DIV_0_TRP;
+  *SCB_CCR |= SCB_CCR_DIV_0_TRP;
 
   /* Enable memory management, bus fault, and usage fault exceptions */
-  SCB_SHCSR |=
+  *SCB_SHCSR |=
       SCB_SHCSR_MEMFAULTENA | SCB_SHCSR_BUSFAULTENA | SCB_SHCSR_USGFAULTENA;
 
   /* Set fault handlers to high priority for proper error handling */
@@ -490,7 +490,7 @@ pok_ret_t pok_nvic_set_vector_table(uint32_t offset) {
     return POK_ERRNO_EFAULT;
   }
 
-  SCB_VTOR = offset;
+  *SCB_VTOR = offset;
   __asm volatile("dsb" : : : "memory");
   __asm volatile("isb");
   /* Keep relocation state consistent with VTOR */

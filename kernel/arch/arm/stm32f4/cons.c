@@ -165,12 +165,8 @@ pok_ret_t pok_cons_init(void) {
   uint32_t mantissa = (uint32_t)(div16 / USART_OVERSAMPLING_FACTOR);
   uint32_t fraction = (uint32_t)(div16 % USART_OVERSAMPLING_FACTOR);
 
-  /* Handle rounding overflow: if fraction == 16, increment mantissa and zero
-   * fraction */
-  if (fraction >= USART_OVERSAMPLING_FACTOR) {
-    mantissa += 1u;
-    fraction = 0u;
-  }
+  /* Note: fraction is always < USART_OVERSAMPLING_FACTOR due to modulo
+   * operation, so no overflow handling needed */
   if (mantissa > 0xFFFu)
     return POK_ERRNO_EINVAL;
 
@@ -222,30 +218,24 @@ pok_ret_t pok_cons_read(char *s, size_t length) {
   }
 
   for (size_t i = 0; i < length; i++) {
-    /* Wait for receive data register to have data with timeout protection */
-    uint32_t timeout =
-        (APB2_FREQ_HZ / UART_BAUD_RATE) * 20; /* ~20 bit times for RX */
+    uint32_t timeout = (APB2_FREQ_HZ / UART_BAUD_RATE) * 20;
     while (!(USART1_SR & USART_SR_RXNE) && timeout > 0) {
       timeout--;
     }
     if (timeout == 0) {
-      /* Avoid printf to prevent recursion in console read function */
       return POK_ERRNO_EFAULT;
     }
 
-    /* Check and clear UART error conditions (ORE/FE/PE) */
+    /* Read SR then DR exactly once to clear flags atomically */
     uint32_t status = USART1_SR;
+    uint32_t data = USART1_DR;
+
     if (status & (USART_SR_ORE | USART_SR_FE | USART_SR_PE)) {
-      /* Clear errors by reading SR then DR */
-      (void)USART1_SR; /* Reading SR */
-      (void)USART1_DR; /* Reading DR clears error flags */
-      /* Avoid printf to prevent recursion - error flags cleared by hardware
-       * sequence */
-      return POK_ERRNO_EFAULT; /* I/O error */
+      /* Discard this byte on error and report */
+      return POK_ERRNO_EFAULT;
     }
 
-    /* Read character */
-    s[i] = USART1_DR & 0xFF;
+    s[i] = (char)(data & 0xFF);
   }
 
   return POK_ERRNO_OK;

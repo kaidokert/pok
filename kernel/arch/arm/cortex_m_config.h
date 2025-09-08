@@ -51,7 +51,8 @@
 #endif
 
 #define CORTEX_M_NVIC_VECTOR_TABLE_SIZE                                        \
-  (CORTEX_M_NVIC_VECTOR_COUNT * 4) /* Each vector is 4 bytes */
+  (CORTEX_M_NVIC_VECTOR_COUNT *                                                \
+   sizeof(uint32_t)) /* Each vector is 4 bytes (uint32_t) */
 
 /* Portable count leading zeros implementation for next power-of-two calculation
  */
@@ -60,7 +61,9 @@
 /* Use compiler builtin for GCC/Clang */
 #define CORTEX_M_CLZ_IMPL(x) __builtin_clz(x)
 #else
-/* Portable fallback implementation using bit manipulation */
+/* Portable fallback implementation using bit manipulation
+ * Returns count of leading zeros: CLZ(1) = 31, CLZ(2) = 30, etc.
+ * CLZ(0) = 32 (matches ARM behavior, though technically undefined) */
 static inline uint32_t cortex_m_clz_fallback(uint32_t x) {
   if (x == 0)
     return 32;
@@ -80,6 +83,10 @@ static inline uint32_t cortex_m_clz_fallback(uint32_t x) {
   if (!(x & 0xC0000000)) {
     count += 2;
     x <<= 2;
+  }
+  if (!(x & 0x80000000)) {
+    count += 1;
+    x <<= 1;
   }
   if (!(x & 0x80000000)) {
     count += 1;
@@ -200,13 +207,13 @@ extern "C" {
  */
 static inline pok_ret_t cortex_m_validate_config(void) {
 #ifdef POK_NEEDS_DEBUG
-/* Validate NVIC vector count against hardware */
-/* NOTE: Function-scoped register macros below are properly encapsulated
- * and do not leak to public header namespace - no visibility issue */
-#define SCB_ICTR                                                               \
-  (*((volatile uint32_t                                                        \
-          *)(0xE000E004))) /* Interrupt Controller Type Register */
-  uint32_t hw_interrupt_lines = ((SCB_ICTR & 0xF) + 1) * 32;
+  /* Validate NVIC vector count against hardware */
+  /* Use local volatile pointer instead of macro to prevent namespace pollution
+   */
+  volatile uint32_t *scb_ictr =
+      (volatile uint32_t
+           *)(0xE000E004); /* Interrupt Controller Type Register */
+  uint32_t hw_interrupt_lines = ((*scb_ictr & 0xF) + 1) * 32;
   uint32_t hw_total_vectors =
       16 + hw_interrupt_lines; /* 16 system + external */
 
@@ -217,11 +224,12 @@ static inline pok_ret_t cortex_m_validate_config(void) {
     return POK_ERRNO_EINVAL;
   }
 
-/* Validate MPU region count against hardware */
-/* NOTE: Function-scoped register macro - properly encapsulated, no leakage */
-#define MPU_TYPE_REG                                                           \
-  (*((volatile uint32_t *)(0xE000ED90))) /* MPU Type Register */
-  uint32_t hw_mpu_regions = (MPU_TYPE_REG >> 8) & 0xFF;
+  /* Validate MPU region count against hardware */
+  /* Use local volatile pointer instead of macro to prevent namespace pollution
+   */
+  volatile uint32_t *mpu_type_reg =
+      (volatile uint32_t *)(0xE000ED90); /* MPU Type Register */
+  uint32_t hw_mpu_regions = (*mpu_type_reg >> 8) & 0xFF;
 
   if (CORTEX_M_MPU_MAX_REGIONS > hw_mpu_regions) {
     printf("ERROR: CORTEX_M_MPU_MAX_REGIONS (%u) exceeds hardware capability "

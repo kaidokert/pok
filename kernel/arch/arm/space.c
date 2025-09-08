@@ -380,10 +380,10 @@ pok_ret_t pok_create_code_region(uint8_t partition_id, uint32_t code_addr,
 
   /* Configure MPU attributes for code region - enforce W^X:
    * - Read/Execute only (no write permission)
-   * - Normal memory with caching
+   * - Internal SRAM attributes (cacheable) for better performance
    */
-  /* Use helper macro for code region (read-only, executable) */
-  mpu_attributes = MPU_CONFIG_FLASH_CODE;
+  /* Use SRAM attributes since partition code resides in SRAM, not Flash */
+  mpu_attributes = MPU_ATTR_INTERNAL_SRAM | MPU_PERM_ALL_RO;
 
   /* ARCHITECTURAL DESIGN DECISION: Use hard power-of-2 alignment for code
    * regions instead of subregions for simplicity and reliability. Code regions
@@ -462,14 +462,15 @@ pok_ret_t pok_space_switch(uint8_t old_partition_id, uint8_t new_partition_id) {
   if (new_partition_id < POK_CONFIG_NB_PARTITIONS) {
     uint8_t data_r = spaces[new_partition_id].mpu_region;
     uint8_t code_r = spaces[new_partition_id].mpu_code_region;
+    uint8_t region_count = pok_mpu_get_region_count();
 
     /* Enable regions in safe order: data (non-exec) first, then code (RX) */
-    if (data_r != 0) {
+    if (data_r != 0 && data_r < region_count) {
       pok_mpu_enable_region(data_r);
     }
     __asm volatile("dsb" : : : "memory");
     __asm volatile("isb" : : : "memory");
-    if (code_r != 0) {
+    if (code_r != 0 && code_r < region_count) {
       pok_mpu_enable_region(code_r);
     }
     __asm volatile("dsb" : : : "memory");
@@ -508,6 +509,16 @@ uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,
    * bounds */
   if (spaces[partition_id].mpu_code_region != 0) {
     /* Entry point must be within the code region */
+    /* Prevent unsigned underflow if code_base < phys_base */
+    if (spaces[partition_id].code_base < spaces[partition_id].phys_base) {
+#ifdef POK_NEEDS_DEBUG
+      printf("ERROR: Code base 0x%x is before partition base 0x%x in partition "
+             "%d\n",
+             spaces[partition_id].code_base, spaces[partition_id].phys_base,
+             partition_id);
+#endif
+      return (0);
+    }
     uint32_t code_region_base =
         spaces[partition_id].code_base - spaces[partition_id].phys_base;
 
@@ -589,9 +600,11 @@ uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,
   memset(ctx, 0, sizeof(context_t));
 
   /* Initialize ARM Cortex-M context for thread startup */
-  ctx->r0 = arg1;                      /* First argument */
-  ctx->r1 = arg2;                      /* Second argument */
-  ctx->lr = ARM_EXC_RETURN_THREAD_PSP; /* Return to Thread mode, use PSP */
+  ctx->r0 = arg1; /* First argument */
+  ctx->r1 = arg2; /* Second argument */
+  /* On first exception return, LR must be a valid return target (exit stub),
+   * not an EXC_RETURN magic value. */
+  ctx->lr = (uint32_t)pok_arch_thread_exit_stub;
   /* ARM Cortex-M processors only support Thumb mode, so Thumb bit must be set
    */
 #ifdef __thumb__
@@ -609,7 +622,8 @@ uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,
          partition_id, entry_abs, stack_abs, arg1, arg2, (uint32_t)ctx);
 #endif
 
-  return (uint32_t)ctx;
+  /* If the scheduler stores PSP directly, return the hardware frame base. */
+  return (uint32_t)&ctx->r0;
 }
 
 pok_ret_t pok_arch_space_init(void) {

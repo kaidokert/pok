@@ -47,11 +47,11 @@ __attribute__((weak)) pok_ret_t pok_cons_init(void) {
   return POK_ERRNO_OK;
 }
 
-__attribute__((weak)) pok_bool_t pok_cons_write(const char *s, size_t length) {
+__attribute__((weak)) pok_ret_t pok_cons_write(const char *s, size_t length) {
   /* Default stub - BSP should override this */
-  (void)s;      /* Suppress unused parameter warning */
-  (void)length; /* Suppress unused parameter warning */
-  return FALSE; /* Indicate write failed/not supported */
+  (void)s;                 /* Suppress unused parameter warning */
+  (void)length;            /* Suppress unused parameter warning */
+  return POK_ERRNO_EFAULT; /* Indicate write failed/not supported */
 }
 
 __attribute__((weak)) pok_ret_t pok_cons_read(char *s, size_t length) {

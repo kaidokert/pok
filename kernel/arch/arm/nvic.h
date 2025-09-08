@@ -26,12 +26,12 @@
 #define NVIC_BASE 0xE000E100
 
 /* System Control Block Registers */
-#define SCB_ICSR (*((volatile uint32_t *)(SCB_BASE + 0x04)))
-#define SCB_VTOR (*((volatile uint32_t *)(SCB_BASE + 0x08)))
-#define SCB_AIRCR (*((volatile uint32_t *)(SCB_BASE + 0x0C)))
-#define SCB_SCR (*((volatile uint32_t *)(SCB_BASE + 0x10)))
-#define SCB_CCR (*((volatile uint32_t *)(SCB_BASE + 0x14)))
-#define SCB_SHCSR (*((volatile uint32_t *)(SCB_BASE + 0x24)))
+#define SCB_ICSR ((volatile uint32_t *)(SCB_BASE + 0x04))
+#define SCB_VTOR ((volatile uint32_t *)(SCB_BASE + 0x08))
+#define SCB_AIRCR ((volatile uint32_t *)(SCB_BASE + 0x0C))
+#define SCB_SCR ((volatile uint32_t *)(SCB_BASE + 0x10))
+#define SCB_CCR ((volatile uint32_t *)(SCB_BASE + 0x14))
+#define SCB_SHCSR ((volatile uint32_t *)(SCB_BASE + 0x24))
 #define SCB_SHPR1 ((volatile uint32_t *)(SCB_BASE + 0x18))
 #define SCB_SHPR2 ((volatile uint32_t *)(SCB_BASE + 0x1C))
 #define SCB_SHPR3 ((volatile uint32_t *)(SCB_BASE + 0x20))

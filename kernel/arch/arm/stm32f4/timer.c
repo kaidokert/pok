@@ -160,7 +160,7 @@ pok_ret_t pok_timer_init(void) {
   *SCB_SHPR3 =
       (*SCB_SHPR3 & 0x00FFFFFF) | (14u << 24); /* SysTick priority 14 */
   /* Clear any pending SysTick before enabling to avoid spurious tick */
-  SCB_ICSR |= SCB_ICSR_PENDSTCLR;
+  *SCB_ICSR |= SCB_ICSR_PENDSTCLR;
 
   /* Configure SysTick: enable, interrupt, use processor clock */
   SYSTICK_CSR =

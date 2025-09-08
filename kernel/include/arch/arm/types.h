@@ -28,14 +28,12 @@
 #endif
 #endif
 /* Fallback path for compilers without __has_include */
-#ifndef POK_HAVE_STDINT
 #ifndef __has_include
+#ifndef POK_HAVE_STDINT
 #include <stdint.h>
 #define POK_HAVE_STDINT 1
 #endif
-#endif
 #ifndef POK_HAVE_STDDEF
-#ifndef __has_include
 #include <stddef.h>
 #define POK_HAVE_STDDEF 1
 #endif

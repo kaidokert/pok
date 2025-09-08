@@ -84,7 +84,9 @@ POK_STATIC_ASSERT((MPU_SUBREGION_ALIGNMENT & (MPU_SUBREGION_ALIGNMENT - 1)) ==
 #endif
 
 /* Validate that POK_SRAM_BASE + POK_SRAM_SIZE does not overflow 32-bit */
-#if ((POK_SRAM_BASE + POK_SRAM_SIZE) < POK_SRAM_BASE)
+/* Check overflow by testing if base > max_uint32 - size (avoids overflow in
+ * check) */
+#if (POK_SRAM_BASE > (0xFFFFFFFFUL - POK_SRAM_SIZE))
 #error "POK_SRAM_BASE + POK_SRAM_SIZE overflows 32-bit address space"
 #endif
 #if (POK_SRAM_BASE & (POK_MEMORY_ALIGNMENT - 1)) != 0
@@ -109,8 +111,8 @@ POK_STATIC_ASSERT((MPU_SUBREGION_ALIGNMENT & (MPU_SUBREGION_ALIGNMENT - 1)) ==
 /* MPU subregion alignment warning - kernel size should align for efficient
  * Cortex-M MPU usage */
 #if (POK_KERNEL_MEMORY_SIZE & MPU_SUBREGION_ALIGNMENT_MASK) != 0
-#warning                                                                       \
-    "POK_KERNEL_MEMORY_SIZE not aligned to MPU subregion boundary (256 bytes) - may reduce Cortex-M MPU efficiency"
+#error                                                                         \
+    "POK_KERNEL_MEMORY_SIZE must be aligned to MPU subregion boundary (256 bytes) for proper Cortex-M MPU operation"
 #endif
 
 /* Kernel region size for MPU configuration */

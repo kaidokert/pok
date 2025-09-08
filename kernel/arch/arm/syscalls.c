@@ -56,21 +56,34 @@ static pok_ret_t pok_safe_copy_from_user(void *dest, const void *src,
     return POK_ERRNO_EINVAL;
   }
 
+  /* Best-effort range prevalidation against current partition virtual bounds to
+   * avoid mid-copy faults */
+  uint8_t part = pok_get_current_partition_id();
+  if (part >= POK_CONFIG_NB_PARTITIONS) {
+    return POK_ERRNO_EINVAL;
+  }
+  uint32_t base_vaddr = pok_partitions[part].base_vaddr;
+  uint32_t psize = pok_partitions[part].size;
+  uint32_t vend;
+  if (psize == 0 || base_vaddr > 0xFFFFFFFFu - psize) {
+    return POK_ERRNO_EINVAL;
+  }
+  vend = base_vaddr + psize;
+
+  uintptr_t u = (uintptr_t)src;
+  if (u < base_vaddr || u > vend - 1) {
+    return POK_ERRNO_EINVAL;
+  }
+  if (size > (vend - u)) {
+    return POK_ERRNO_EINVAL;
+  }
+
   const uint8_t *src_bytes = (const uint8_t *)src;
   uint8_t *dest_bytes = (uint8_t *)dest;
-
-  /* Use volatile to prevent compiler optimization that might combine accesses
-   */
   for (size_t i = 0; i < size; i++) {
-    /* Each byte access could potentially fault if user address becomes invalid
-     * The MPU will catch violations and generate MemManage fault.
-     * For now, we rely on prior address validation - a more robust
-     * implementation would install a temporary fault handler to catch and
-     * recover from faults. */
     volatile const uint8_t *src_ptr = &src_bytes[i];
     dest_bytes[i] = *src_ptr;
   }
-
   return POK_ERRNO_OK;
 }
 
@@ -155,32 +168,34 @@ static void svc_handler_impl(uint32_t *frame) {
     goto syscall_exit;
   }
   uint32_t part_vend = base_vaddr + psize;
-  if (user_vaddr < base_vaddr || user_vaddr > (part_vend - args_size)) {
+
+  /* Ensure user_vaddr is not below base_vaddr */
+  if (user_vaddr < base_vaddr) {
+    syscall_ret = POK_ERRNO_EINVAL; /* User vaddr below partition base */
+    goto syscall_exit;
+  }
+
+  if (user_vaddr > (part_vend - args_size)) {
     syscall_ret = POK_ERRNO_EINVAL; /* Pointer outside partition vaddr range */
     goto syscall_exit;
   }
-  /* Check for underflow in offset calculation */
-  if (base_vaddr > base_addr) {
-    syscall_ret = POK_ERRNO_EINVAL; /* Invalid partition configuration */
+
+  /* Compute offset = user_vaddr - base_vaddr */
+  uint32_t offset = user_vaddr - base_vaddr;
+
+  /* Check for 32-bit overflow before adding to base_addr:
+   * Ensure base_addr + offset <= 0xFFFFFFFFU
+   * Equivalent to: offset <= 0xFFFFFFFFU - base_addr */
+  if (offset > (0xFFFFFFFFU - base_addr)) {
+    syscall_ret = POK_ERRNO_EINVAL; /* Address calculation would overflow */
     goto syscall_exit;
   }
 
-  uint32_t kernel_offset = base_addr - base_vaddr;
+  uint32_t kernel_addr = base_addr + offset;
 
-  /* Check for 32-bit pointer addition overflow using safer arithmetic */
-  if (user_vaddr > (0xFFFFFFFFU - kernel_offset)) {
-    syscall_ret = POK_ERRNO_EINVAL; /* Address overflow */
-    goto syscall_exit;
-  }
-
-  uint32_t kernel_addr = user_vaddr + kernel_offset;
-
-  /* Ensure kernel address meets args struct alignment */
-  const size_t args_align = __alignof__(pok_syscall_args_t);
-  if (args_align && (kernel_addr & (args_align - 1))) {
-    syscall_ret = POK_ERRNO_EINVAL; /* Misaligned address */
-    goto syscall_exit;
-  }
+  /* Note: No kernel-address alignment check needed - args are copied byte-wise
+   * into a properly aligned kernel-local struct regardless of user pointer
+   * alignment */
   /*
    * SECURITY: Copy syscall arguments to kernel-owned buffer to prevent TOCTOU
    * attacks. A malicious partition could modify arguments after validation but
