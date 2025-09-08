@@ -98,9 +98,30 @@ uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
 
   /* Bounds: ensure software frame [r4-r11] and hardware frame [r0..xpsr] fit */
   uint32_t stack_base = (uint32_t)(uintptr_t)stack_addr;
-  uint32_t stack_limit = stack_base + stack_size;
+
+  /* SECURITY: Check for 32-bit overflow in stack_limit calculation */
+  uint32_t stack_limit;
+  if (stack_size > UINT32_MAX - stack_base) {
+    /* Overflow would occur - invalid stack configuration */
+#ifdef POK_NEEDS_DEBUG
+    printf("Error: stack configuration would cause 32-bit overflow\n");
+#endif
+    pok_bsp_mem_free(stack_addr, stack_size);
+    return 0;
+  }
+  stack_limit = stack_base + stack_size;
+
   uint32_t hw_frame_end = initial_psp + (8U * sizeof(uint32_t)); /* past xpsr */
   uint32_t sw_frame_start = (uint32_t)(uintptr_t)&sp->ctx.r4; /* lowest addr */
+
+  /* Additional hardening: check hw_frame_end calculation for overflow */
+  if (initial_psp > UINT32_MAX - (8U * sizeof(uint32_t))) {
+#ifdef POK_NEEDS_DEBUG
+    printf("Error: hardware frame end calculation would overflow\n");
+#endif
+    pok_bsp_mem_free(stack_addr, stack_size);
+    return 0;
+  }
 
   if (sw_frame_start < stack_base || hw_frame_end > stack_limit) {
 #ifdef POK_NEEDS_DEBUG
@@ -143,6 +164,26 @@ void pok_context_switch(uint32_t *old_sp, uint32_t new_sp) {
     g_old_sp_ptr = NULL;
     g_new_sp = 0;
     return;
+  }
+
+  /* SECURITY: Verify new_sp is a valid stack pointer value
+   * Basic sanity checks to prevent malicious or corrupted stack pointers */
+  if (new_sp == 0 || (new_sp & 0x3) != 0) {
+    /* Invalid: NULL or non-word-aligned stack pointer */
+#ifdef POK_NEEDS_DEBUG
+    printf("Error: invalid stack pointer in context switch: 0x%08x\n", new_sp);
+#endif
+    return;
+  }
+
+  /* Additional check: ensure new_sp is in reasonable memory range
+   * ARM Cortex-M typically uses 0x20000000+ for SRAM */
+  if (new_sp < 0x20000000 || new_sp >= 0x30000000) {
+#ifdef POK_NEEDS_DEBUG
+    printf("Warning: suspicious stack pointer outside SRAM range: 0x%08x\n",
+           new_sp);
+#endif
+    /* Continue but log the warning - might be valid in some configurations */
   }
 
   /* Disable interrupts to prevent race conditions during handoff */

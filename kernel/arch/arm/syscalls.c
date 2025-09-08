@@ -279,23 +279,22 @@ void __attribute__((naked, no_instrument_function)) PendSV_Handler(void) {
          restoration */
       "sub r0, r0, #32            \n" /* r0 = r0 - CORTEX_M_SOFTWARE_FRAME_SIZE
                                        */
-          * /
-          "ldmia r0!, {r4-r11}        \n" /* Restore r4-r11, r0 now points to
+      "ldmia r0!, {r4-r11}        \n" /* Restore r4-r11, r0 now points to
                                              hardware frame */
-          "msr psp, r0                \n" /* Set PSP to hardware frame for
-                                             exception return */
+      "msr psp, r0                \n" /* Set PSP to hardware frame for
+                                         exception return */
 
-          /* Clear g_new_sp to prevent stale reuse */
-          "movs r3, #0                \n"
-          "str r3, [r2]               \n"
+      /* Clear g_new_sp to prevent stale reuse */
+      "movs r3, #0                \n"
+      "str r3, [r2]               \n"
 
-          /* Ensure memory ops complete before return */
-          "dsb                        \n"
-          "isb                        \n"
+      /* Ensure memory ops complete before return */
+      "dsb                        \n"
+      "isb                        \n"
 
-          "3:                         \n"
-          /* Return with original EXC_RETURN value preserved in LR */
-          "bx lr                      \n" /* Return from exception */
+      "3:                         \n"
+      /* Return with original EXC_RETURN value preserved in LR */
+      "bx lr                      \n" /* Return from exception */
 
       :
       :
