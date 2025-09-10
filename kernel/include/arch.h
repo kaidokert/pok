@@ -44,7 +44,7 @@ pok_ret_t pok_arch_preempt_enable();
 /**
  * Function that do nothing. Useful for the idle task for example.
  */
-pok_ret_t pok_arch_idle();
+pok_ret_t pok_arch_idle(void);
 
 /**
  * Register an event (for example, an interruption)
@@ -104,7 +104,13 @@ uint32_t pok_thread_stack_addr(const uint8_t partition_id,
  */
 __attribute__((noreturn)) void pok_division_by_zero_error(void);
 
+#ifdef POK_ARCH_ARM
+#include <arch/arm/rendezvous.h>
+#include <arch/arm/spinlock.h>
+#endif
+
 #ifdef POK_ARCH_PPC
+#include <arch/ppc/rendezvous.h>
 #include <arch/ppc/spinlock.h>
 #endif
 
@@ -115,6 +121,10 @@ __attribute__((noreturn)) void pok_division_by_zero_error(void);
 
 #ifdef POK_ARCH_SPARC
 #include <arch/sparc/spinlock.h>
+#endif
+
+#ifdef POK_ARCH_ARM
+/* ARM-specific includes can be added here if needed */
 #endif
 
 #endif /* !__POK_ARCH_H__ */

@@ -12,21 +12,27 @@
  *                                      Copyright (c) 2007-2025 POK team
  */
 
-#ifndef __POK_X86_TYPES_H__
-#define __POK_X86_TYPES_H__
-
-typedef unsigned char uint8_t;
-typedef unsigned short uint16_t;
-typedef unsigned int uint32_t;
-typedef unsigned long long uint64_t;
-
-typedef char int8_t;
-typedef short int16_t;
-typedef int int32_t;
-typedef signed long long int64_t;
+#include "cons.h"
 
 typedef unsigned int size_t;
-typedef unsigned long int intptr_t;
-typedef unsigned long int uintptr_t;
+typedef int pok_bool_t;
 
+#if defined(POK_NEEDS_CONSOLE) || defined(POK_NEEDS_DEBUG) ||                  \
+    defined(POK_NEEDS_INSTRUMENTATION) || defined(POK_NEEDS_COVERAGE_INFOS) || \
+    defined(POK_NEEDS_USER_DEBUG)
+
+static void write_stub(char c) { (void)c; }
+
+pok_bool_t pok_cons_write(const char *s, size_t length) {
+  (void)s;
+  (void)length;
+  return 0;
+}
+
+int pok_cons_init(void) {
+  pok_print_init(write_stub, NULL);
+  return 0;
+}
+#else
+int pok_cons_init(void) { return 0; }
 #endif

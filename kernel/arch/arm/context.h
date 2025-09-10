@@ -12,21 +12,11 @@
  *                                      Copyright (c) 2007-2025 POK team
  */
 
-#ifndef __POK_X86_TYPES_H__
-#define __POK_X86_TYPES_H__
-
-typedef unsigned char uint8_t;
-typedef unsigned short uint16_t;
-typedef unsigned int uint32_t;
-typedef unsigned long long uint64_t;
-
-typedef char int8_t;
-typedef short int16_t;
-typedef int int32_t;
-typedef signed long long int64_t;
-
-typedef unsigned int size_t;
-typedef unsigned long int intptr_t;
-typedef unsigned long int uintptr_t;
-
-#endif
+#ifndef __POK_ARM_CONTEXT_H__
+#define __POK_ARM_CONTEXT_H__
+/*
+ * Reserved for ARM context structures/APIs (see thread.h). Intentionally empty
+ * for now. Add only forward decls and shared definitions to avoid circular
+ * includes.
+ */
+#endif /* __POK_ARM_CONTEXT_H__ */

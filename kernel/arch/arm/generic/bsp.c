@@ -12,21 +12,24 @@
  *                                      Copyright (c) 2007-2025 POK team
  */
 
-#ifndef __POK_X86_TYPES_H__
-#define __POK_X86_TYPES_H__
+#include "cons.h"
 
-typedef unsigned char uint8_t;
-typedef unsigned short uint16_t;
-typedef unsigned int uint32_t;
-typedef unsigned long long uint64_t;
-
-typedef char int8_t;
-typedef short int16_t;
-typedef int int32_t;
-typedef signed long long int64_t;
-
+#define POK_ERRNO_OK 0
 typedef unsigned int size_t;
-typedef unsigned long int intptr_t;
-typedef unsigned long int uintptr_t;
+typedef unsigned int uintptr_t;
 
-#endif
+int pok_bsp_init(void) {
+  pok_cons_init();
+  return POK_ERRNO_OK;
+}
+
+extern char _end[];
+
+static char *heap_end = _end;
+
+void *pok_bsp_mem_alloc(size_t sz) {
+  char *res;
+  res = (char *)(((uintptr_t)heap_end + 4095) & ~4095);
+  heap_end = res + sz;
+  return res;
+}

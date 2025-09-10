@@ -12,21 +12,9 @@
  *                                      Copyright (c) 2007-2025 POK team
  */
 
-#ifndef __POK_X86_TYPES_H__
-#define __POK_X86_TYPES_H__
+#include <core/multiprocessing.h>
 
-typedef unsigned char uint8_t;
-typedef unsigned short uint16_t;
-typedef unsigned int uint32_t;
-typedef unsigned long long uint64_t;
+/* ARM Cortex-M is single-core, so multiprocessing is disabled */
+uint8_t multiprocessing_system = 0;
 
-typedef char int8_t;
-typedef short int16_t;
-typedef int int32_t;
-typedef signed long long int64_t;
-
-typedef unsigned int size_t;
-typedef unsigned long int intptr_t;
-typedef unsigned long int uintptr_t;
-
-#endif
+uint8_t pok_get_proc_id(void) { return 0; /* Single processor system */ }
