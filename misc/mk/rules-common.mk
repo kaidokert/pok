@@ -10,18 +10,19 @@ QEMU=$(QEMU_$(ARCH))
 CONFIG_QEMU=$(CONFIG_QEMU_$(ARCH))
 RANLIB=$(RANLIB_$(ARCH))
 GNATMAKE=$(GNATMAKE_$(ARCH))
+STRIP=$(STRIP_$(ARCH))
 
 CFLAGS+=-D__POK_C__
 
-ifneq ($(XCOV),) 
+ifneq ($(XCOV),)
 CFLAGS+=-DPOK_NEEDS_COVERAGE_INFOS
 endif
 
-ifneq ($(POK_CONFIG_OPTIMIZE_FOR_GENERATED_CODE),) 
+ifneq ($(POK_CONFIG_OPTIMIZE_FOR_GENERATED_CODE),)
 CFLAGS+=-DPOK_CONFIG_OPTIMIZE_FOR_GENERATED_CODE=1
 endif
 
-ifneq ($(LO_TARGET),) 
+ifneq ($(LO_TARGET),)
 $(LO_TARGET): $(LO_DEPS) $(LO_OBJS)
 	$(ECHO) $(ECHO_FLAGS) $(ECHO_FLAGS_ONELINE) "[LD] $@ "
 	$(LD) $(LDFLAGS) $(LDOPTS) -r $(LO_DEPS) $(LO_OBJS) -o $(LO_TARGET)
@@ -36,7 +37,7 @@ $(OBJ_DIR)/%.a: $(LO_DEPS)
 $(OBJ_DIR)/%.o: %.S
 	$(ECHO) $(ECHO_FLAGS) $(ECHO_FLAGS_ONELINE) "[CC] $< "
 	$(GREP) PROCESSORS $(DEPLOYMENT_HEADER) > tmp.h
-	$(CC) -c $(CFLAGS) -include tmp.h -DASM_SOURCE=1 $< -o $@
+	$(CC) -c $(ASFLAGS) -nostdinc -iwithprefix include -fno-builtin -DPOK_ARCH_ARM -DPOK_NEEDS_STM32F4_PERIPHERALS -O -fno-stack-protector -ffreestanding -nostdlib -I/opt/m/crazy/pok/kernel/include -I/opt/m/crazy/pok/libpok/include -I../../../..//kernel/include -include tmp.h -DASM_SOURCE=1 $< -o $@
 	$(RM) tmp.h
 	if test $$? -eq 0; then $(ECHO) $(ECHO_FLAGS) $(ECHO_GREEN) " OK "; else $(ECHO) $(ECHO_FLAGS) $(ECHO_RED) " KO"; fi
 

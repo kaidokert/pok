@@ -13,25 +13,55 @@
  */
 
 #include "activity.h"
+#include <core/mutex.h>
 #include <core/partition.h>
 #include <core/thread.h>
 #include <libc/stdio.h>
 #include <types.h>
 
+uint8_t mid;
+
 int main() {
-  uint32_t tid;
-  int ret;
+  uint32_t tid; /* Changed from uint8_t to match pok_thread_create signature */
+  pok_ret_t ret;
   pok_thread_attr_t tattr;
 
-  tattr.priority = 42;
+  printf("=== POK Mutexes Demo - Partition 2 ===\n");
+
+  /* Create the mutex first */
+  ret = pok_mutex_create(&mid, POK_QUEUEING_DISCIPLINE_FIFO,
+                         POK_LOCKOBJ_POLICY_STANDARD);
+  printf("[P2] pok_mutex_create return=%d, mid=%d\n", ret, mid);
+
+  /* Set up thread attributes for first worker thread */
+  tattr.priority = 44;
   tattr.entry = pinger_job;
+  tattr.stack_size = 2048;
+  tattr.period = 0;
+  tattr.deadline = 0;
+  tattr.time_capacity = 0;
   tattr.processor_affinity = 0;
 
   ret = pok_thread_create(&tid, &tattr);
-  printf("thread create returns=%d\n", ret);
+  printf("[P2] pok_thread_create (1) return=%d\n", ret);
 
-  pok_partition_set_mode(POK_PARTITION_MODE_NORMAL);
-  pok_thread_wait_infinite();
+  /* Set up thread attributes for second worker thread */
+  tattr.priority = 42;
+  tattr.entry = pinger_job;
+  tattr.stack_size = 2048;
 
-  return (1);
+  ret = pok_thread_create(&tid, &tattr);
+  printf("[P2] pok_thread_create (2) return=%d\n", ret);
+
+  printf("[P2] Main thread switching partition to NORMAL mode\n");
+  ret = pok_partition_set_mode(POK_PARTITION_MODE_NORMAL);
+  printf("[P2] pok_partition_set_mode return=%d\n", ret);
+
+  printf("[P2] Main thread entering infinite loop (worker threads should now "
+         "execute)\n");
+
+  while (1)
+    ; /* Main thread idle - worker threads will execute */
+
+  return (0);
 }

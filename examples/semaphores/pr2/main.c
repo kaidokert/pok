@@ -19,19 +19,32 @@
 #include <types.h>
 
 int main() {
-  uint32_t tid;
-  int ret;
+  uint32_t tid; /* libpok API uses uint32_t */
+  pok_ret_t ret;
   pok_thread_attr_t tattr;
+
+  printf("=== POK Semaphores Demo - Partition 2 ===\n");
 
   tattr.priority = 42;
   tattr.entry = pinger_job;
+  tattr.stack_size = 2048;
+  tattr.period = 0;
+  tattr.deadline = 0;
+  tattr.time_capacity = 0;
   tattr.processor_affinity = 0;
 
   ret = pok_thread_create(&tid, &tattr);
   printf("[P2] thread create returns=%d\n", ret);
 
-  pok_partition_set_mode(POK_PARTITION_MODE_NORMAL);
-  pok_thread_wait_infinite();
+  printf("[P2] Main thread switching partition to NORMAL mode\n");
+  ret = pok_partition_set_mode(POK_PARTITION_MODE_NORMAL);
+  printf("[P2] pok_partition_set_mode return=%d\n", ret);
 
-  return (1);
+  printf("[P2] Main thread entering infinite loop (worker thread should now "
+         "execute)\n");
+
+  while (1)
+    ; /* Main thread idle - worker thread will execute */
+
+  return (0);
 }

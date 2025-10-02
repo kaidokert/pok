@@ -29,11 +29,16 @@ int main() {
   tattr.priority = 42;
   tattr.entry = pinger_job;
   tattr.processor_affinity = 0;
+  tattr.stack_size = 2048;
+  tattr.period = 0;
+  tattr.deadline = 0;
+  tattr.time_capacity = 0;
 
   ret = pok_thread_create(&tid, &tattr);
 
   tattr.priority = 42;
   tattr.entry = pinger_job2;
+  tattr.stack_size = 2048;
 
   ret = pok_thread_create(&tid, &tattr);
 

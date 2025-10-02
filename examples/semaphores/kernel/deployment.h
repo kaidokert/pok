@@ -9,25 +9,23 @@
 #define POK_CONFIG_NB_LOCKOBJECTS 1
 #define POK_CONFIG_NB_PARTITIONS 2
 #define POK_CONFIG_NB_PROCESSORS 1
-#define POK_CONFIG_NB_THREADS 7
+#define POK_CONFIG_NB_THREADS                                                  \
+  7 /* P0 has 3 threads (1 main + 2 workers), P1 has 2 threads */
 #define POK_CONFIG_PARTITIONS_NLOCKOBJECTS                                     \
-  { 1, 0 }
+  {1, 0} /* P0 has 1 semaphore, P1 has 0 */
 #define POK_CONFIG_PARTITIONS_NTHREADS                                         \
-  { 3, 2 }
-#define POK_CONFIG_PARTITIONS_SCHEDULER                                        \
-  { POK_SCHED_STATIC, POK_SCHED_RR }
+  {3, 2} /* W^X with 2KB stacks: 8KB data region / 2KB stacks = 4 threads max  \
+            per partition */
+#define POK_CONFIG_PARTITIONS_SCHEDULER {POK_SCHED_STATIC, POK_SCHED_RR}
 #define POK_CONFIG_PARTITIONS_SIZE                                             \
-  { 133120, 133120 }
-#define POK_CONFIG_PROCESSOR_AFFINITY                                          \
-  { 1, 1 }
-#define POK_CONFIG_PROGRAM_NAME                                                \
-  { "pr1/pr1.elf", "pr2/pr2.elf" }
+  {16384, 16384} /* 16KB per partition for W^X (8KB code + 8KB data) */
+#define POK_CONFIG_PROCESSOR_AFFINITY {1, 1}
+#define POK_CONFIG_PROGRAM_NAME {"pr1/pr1.elf", "pr2/pr2.elf"}
 #define POK_CONFIG_SCHEDULING_MAJOR_FRAME 53000000000
 #define POK_CONFIG_SCHEDULING_NBSLOTS 4
 #define POK_CONFIG_SCHEDULING_SLOTS                                            \
-  { 2000000000, 40000000000, 1000000000, 10000000000 }
-#define POK_CONFIG_SCHEDULING_SLOTS_ALLOCATION                                 \
-  { 0, 1, 0, 1 }
+  {2000000000, 40000000000, 1000000000, 10000000000}
+#define POK_CONFIG_SCHEDULING_SLOTS_ALLOCATION {0, 1, 0, 1}
 
 #define POK_NEEDS_CONSOLE 1
 #define POK_NEEDS_DEBUG 1

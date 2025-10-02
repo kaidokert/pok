@@ -26,3 +26,9 @@ generated-code/
 GPATH
 GRTAGS
 GTAGS
+*.su
+*.gdb
+*.sh
+*.txt
+*.debug
+*.elf.asm

@@ -2,8 +2,8 @@
 # Do not make manual modifications there or they will be lost.
 
 export POK_PATH=$(CURDIR)/../../..
-export ARCH=x86
-export BSP=x86-qemu
+export ARCH=arm
+export BSP=stm32f4
 export DEPLOYMENT_HEADER=$(CURDIR)/deployment.h
 
 include $(POK_PATH)/misc/mk/config.mk
@@ -20,4 +20,3 @@ clean: common-clean libpok-clean
 include $(POK_PATH)/misc/mk/common-$(ARCH).mk
 include $(POK_PATH)/misc/mk/rules-common.mk
 include $(POK_PATH)/misc/mk/rules-partition.mk
-
