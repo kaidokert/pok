@@ -12,8 +12,11 @@
  *                                      Copyright (c) 2007-2025 POK team
  */
 
+/* Architecture-specific includes */
+#ifdef POK_ARCH_X86
 #include <arch/x86/ioports.h>
 #include <arch/x86/pci.h>
+#endif
 #include <bsp.h>
 #include <libc.h>
 #include <types.h>
@@ -51,7 +54,8 @@ extern uint32_t pok_ports_names_max_len;
 // Check that the given pointer and size belong to the calling partition
 #define CHECK_PTR(ptr, sz)                                                     \
   do {                                                                         \
-    if (!pok_check_ptr_in_partition(infos->partition, (ptr), (sz))) {          \
+    if (!pok_check_ptr_in_partition(POK_SCHED_CURRENT_PARTITION, (ptr),        \
+                                    (sz))) {                                   \
       return POK_ERRNO_EINVAL;                                                 \
     }                                                                          \
   } while (0)
@@ -378,7 +382,7 @@ pok_ret_t pok_core_syscall(const pok_syscall_id_t syscall_id,
     }
 #endif /* POK_NEEDS_LOCKOBJECTS */
 
-#ifdef POK_NEEDS_IO
+#if defined(POK_NEEDS_IO) && defined(POK_ARCH_X86)
   case POK_SYSCALL_INB:
     if ((args->arg1 < pok_partitions[infos->partition].io_min) ||
         (args->arg1 > pok_partitions[infos->partition].io_max)) {
@@ -395,7 +399,7 @@ pok_ret_t pok_core_syscall(const pok_syscall_id_t syscall_id,
       outb((unsigned short)args->arg1, (unsigned char)args->arg2);
       return POK_ERRNO_OK;
     }
-#endif /* POK_NEEDS_IO */
+#endif /* POK_NEEDS_IO && POK_ARCH_X86 */
 
 #ifdef POK_NEEDS_PCI
   case POK_SYSCALL_PCI_REGISTER:

@@ -21,7 +21,9 @@
  * Contains all needed stuff to load partitions (elf files).
  */
 
+#include <bsp.h>
 #include <core/cpio.h>
+#include <core/debug.h>
 #include <core/error.h>
 #include <core/partition.h>
 #include <elf.h>
@@ -46,34 +48,106 @@ static pok_ret_t pok_loader_elf_load(char *file, uint32_t offset,
   unsigned int i;
   char *dest;
 
+  pok_cons_write("LOADER: pok_loader_elf_load called\n", 35);
   elf_header = (Elf32_Ehdr *)file;
+
+  pok_cons_write("LOADER: ELF header parsed, checking magic\n", 42);
+
+  /* Debug: show what we're actually reading */
+  if (elf_header->e_ident[0] == 0x7f) {
+    pok_cons_write("LOADER: First byte is 0x7f (correct)\n", 37);
+  } else {
+    pok_cons_write("LOADER: First byte is NOT 0x7f (wrong!)\n", 40);
+  }
 
   if (elf_header->e_ident[0] != 0x7f || elf_header->e_ident[1] != 'E' ||
       elf_header->e_ident[2] != 'L' || elf_header->e_ident[3] != 'F') {
-    return POK_ERRNO_NOTFOUND;
+    pok_cons_write("LOADER: ERROR - Invalid ELF magic\n", 35);
+    pok_fatal("ELF loader received corrupted partition data");
   }
 
-  *entry = (void *)elf_header->e_entry;
+  pok_cons_write("LOADER: ELF magic valid, processing entry point\n", 48);
+
+  /* Add offset to entry point for position-independent partitions */
+  *entry = (void *)(elf_header->e_entry + offset);
+
+  /* Simplified debug - just show we got to entry point calculation */
+  pok_cons_write("LOADER: Entry point calculated\n", 31);
 
   elf_phdr = (Elf32_Phdr *)(file + elf_header->e_phoff);
 
   for (i = 0; i < elf_header->e_phnum; ++i) {
-    dest = (char *)elf_phdr[i].p_vaddr + offset;
+    /* Add offset to vaddr for position-independent partitions */
+    dest = (char *)(elf_phdr[i].p_vaddr + offset);
 
     memcpy(dest, elf_phdr[i].p_offset + file, elf_phdr[i].p_filesz);
     memset(dest + elf_phdr[i].p_filesz, 0,
            elf_phdr[i].p_memsz - elf_phdr[i].p_filesz);
   }
 
+  /* Relocations not needed for position-independent partitions with offset */
+
   return POK_ERRNO_OK;
 }
 
 void pok_loader_load_partition(const uint8_t part_id, uint32_t offset,
                                uint32_t *entry) {
+  pok_cons_write("LOADER: Starting partition loading\n", 35);
+
   void *elf_entry = NULL;
   extern char __archive2_begin;
   uint32_t size;
   uint8_t t;
+
+  /* Test the archive symbol address first (without accessing memory) */
+  uint32_t archive_addr = (uint32_t)&__archive2_begin;
+  pok_cons_write("LOADER: Archive symbol at 0x", 29);
+
+  /* Simple hex display of address */
+  char hex_chars[] = "0123456789ABCDEF";
+  for (int i = 7; i >= 0; i--) {
+    char hex_digit = hex_chars[(archive_addr >> (i * 4)) & 0xF];
+    pok_cons_write(&hex_digit, 1);
+  }
+  pok_cons_write("\n", 1);
+
+  /* Check if address is in reasonable range for STM32F4 memory map */
+  if (archive_addr < 0x08000000 || archive_addr > 0x081FFFFF) {
+    pok_cons_write("FATAL: Archive symbol outside flash memory range\n", 49);
+    pok_cons_write("Expected: 0x08000000-0x081FFFFF (flash), got: 0x", 49);
+    for (int i = 7; i >= 0; i--) {
+      char hex_digit = hex_chars[(archive_addr >> (i * 4)) & 0xF];
+      pok_cons_write(&hex_digit, 1);
+    }
+    pok_cons_write("\n", 1);
+    pok_fatal("Symbol resolution problem - archive not linked to flash memory");
+  }
+
+  /* Now try to access the memory - this might cause a fault if MPU blocks
+   * access */
+  pok_cons_write("LOADER: Testing memory access to archive...\n", 44);
+
+  /* Use volatile to prevent compiler optimization */
+  volatile unsigned char test_byte;
+
+  /* Try to read the first byte - this will fault if MPU blocks access */
+  test_byte = *((volatile unsigned char *)&__archive2_begin);
+
+  pok_cons_write("LOADER: Memory access successful, first byte: 0x", 48);
+  pok_cons_write(&hex_chars[test_byte >> 4], 1);
+  pok_cons_write(&hex_chars[test_byte & 0xF], 1);
+  pok_cons_write("\n", 1);
+
+  /* Validate ELF magic number */
+  if (test_byte != 0x7f) {
+    pok_cons_write("FATAL: Invalid ELF magic at archive start\n", 42);
+    pok_cons_write("Expected: 0x7F (ELF magic), got: 0x", 35);
+    pok_cons_write(&hex_chars[test_byte >> 4], 1);
+    pok_cons_write(&hex_chars[test_byte & 0xF], 1);
+    pok_cons_write("\n", 1);
+    pok_cons_write("This indicates flash memory mapping issues\n", 43);
+    pok_fatal("Flash memory contains wrong data - possible mapping problem");
+  }
 
   size = 0;
   t = 0;
@@ -83,14 +157,73 @@ void pok_loader_load_partition(const uint8_t part_id, uint32_t offset,
     t++;
   }
 
-  if (pok_partitions[part_id].size < part_sizes[part_id]) {
+  char *elf_file = (&__archive2_begin) + size;
+  Elf32_Ehdr *elf_header = (Elf32_Ehdr *)elf_file;
+
+  /* Validate ELF header at partition offset */
+  pok_cons_write("LOADER: Checking partition ", 27);
+  pok_cons_write(&hex_chars[part_id + '0'], 1);
+  pok_cons_write(" ELF header at offset ", 22);
+
+  /* Display size offset */
+  for (int i = 7; i >= 0; i--) {
+    char hex_digit = hex_chars[(size >> (i * 4)) & 0xF];
+    pok_cons_write(&hex_digit, 1);
+  }
+  pok_cons_write("\n", 1);
+
+  if (elf_header->e_ident[0] != 0x7f || elf_header->e_ident[1] != 'E' ||
+      elf_header->e_ident[2] != 'L' || elf_header->e_ident[3] != 'F') {
+    pok_cons_write("FATAL: Invalid ELF header for partition\n", 40);
+    pok_cons_write("ELF magic bytes: 0x", 19);
+    for (int i = 0; i < 4; i++) {
+      pok_cons_write(&hex_chars[elf_header->e_ident[i] >> 4], 1);
+      pok_cons_write(&hex_chars[elf_header->e_ident[i] & 0xF], 1);
+      pok_cons_write(" ", 1);
+    }
+    pok_cons_write("\n", 1);
+    pok_fatal("Partition ELF data corrupted or incorrectly positioned");
+  }
+
+  pok_cons_write("LOADER: ELF validation passed, proceeding with load\n", 52);
+  uint32_t required_memory = 0;
+  uint32_t partition_base = pok_partitions[part_id].base_addr;
+
+  if (elf_header->e_ident[0] == 0x7f && elf_header->e_ident[1] == 'E' &&
+      elf_header->e_ident[2] == 'L' && elf_header->e_ident[3] == 'F') {
+    Elf32_Phdr *elf_phdr = (Elf32_Phdr *)(elf_file + elf_header->e_phoff);
+
+    for (unsigned int i = 0; i < elf_header->e_phnum; ++i) {
+      if (elf_phdr[i].p_type == PT_LOAD) {
+        /* Calculate size relative to partition base, not absolute address */
+        uint32_t end_offset =
+            (elf_phdr[i].p_vaddr - partition_base) + elf_phdr[i].p_memsz;
+        if (end_offset > required_memory) {
+          required_memory = end_offset;
+        }
+      }
+    }
+  } else {
+    required_memory = part_sizes[part_id];
+  }
+
+#ifdef POK_NEEDS_DEBUG
+  printf("LOADER: Partition %u: allocated_size=%u, file_size=%u, "
+         "required_memory=%u\n",
+         part_id, pok_partitions[part_id].size, part_sizes[part_id],
+         required_memory);
+#endif
+
+  if (pok_partitions[part_id].size < required_memory) {
+#ifdef POK_NEEDS_DEBUG
+    printf("LOADER ERROR: Partition %u requires %u bytes but only %u bytes "
+           "allocated\n",
+           part_id, required_memory, pok_partitions[part_id].size);
+#endif
     pok_partition_error(part_id, POK_ERROR_KIND_PARTITION_CONFIGURATION);
   }
-  /*
-   *  FIXME : current debug session about exceptions-handled
-  printf ("Will load partition at offset 0x%x\n", offset);
-  */
-  pok_loader_elf_load((&__archive2_begin) + size, offset, &elf_entry);
+
+  pok_loader_elf_load(elf_file, offset, &elf_entry);
 
   *entry = (uint32_t)elf_entry;
 }

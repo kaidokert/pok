@@ -31,14 +31,15 @@
 #include <middleware/queue.h>
 
 #include <core/instrumentation.h>
+#include <libc.h>
 
 void pok_boot() {
   pok_arch_init();
   pok_bsp_init();
-  pok_time_init();
   pok_partition_init();
   pok_thread_init();
-  pok_sched_init();
+  pok_sched_init(); /* Initialize scheduler BEFORE starting timer */
+  pok_time_init();  /* Initialize timer last - starts SysTick interrupts */
 
 #if (defined POK_NEEDS_LOCKOBJ) || defined(POK_NEEDS_PORTS_QUEUEING) ||        \
     defined(POK_NEEDS_PORTS_SAMPLING)
@@ -52,6 +53,18 @@ void pok_boot() {
 #if defined(POK_NEEDS_DEBUG) || defined(POK_NEEDS_CONSOLE)
   pok_cons_write("POK kernel initialized\n", 23);
 #endif
+
+  /* ARM Cortex-M: Let partition main threads create resources in INIT mode
+   * Partitions will call pok_partition_set_mode() themselves when ready */
+#if defined(POK_NEEDS_DEBUG) || defined(POK_NEEDS_CONSOLE)
+  pok_cons_write(
+      "Partitions starting in INIT mode (will transition via syscall)\n", 64);
+#endif
+
+  /* Do NOT automatically transition to NORMAL mode - let partitions do it */
+  /* for (uint8_t i = 0; i < POK_CONFIG_NB_PARTITIONS; i++) {
+    pok_partition_set_mode(i, POK_PARTITION_MODE_NORMAL);
+  } */
 
 #ifdef POK_NEEDS_INSTRUMENTATION
   uint32_t tmp;
@@ -67,4 +80,6 @@ void pok_boot() {
 #endif
 
   pok_arch_preempt_enable();
+
+  pok_arch_idle();
 }

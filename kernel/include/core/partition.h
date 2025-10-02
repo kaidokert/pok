@@ -137,7 +137,7 @@ extern pok_partition_t pok_partitions[POK_CONFIG_NB_PARTITIONS];
 
 /**
  * Check that [ \a ptr ; \a ptr + \a size [ is located in the address
- * space of partition \a pid. User partition \a ptr is relative to 0.
+ * space of partition \a pid. Pointer \a ptr must be an absolute address.
  */
 static inline bool_t pok_check_ptr_in_partition(pok_partition_id_t pid,
                                                 void *ptr, uint32_t size) {
@@ -145,11 +145,14 @@ static inline bool_t pok_check_ptr_in_partition(pok_partition_id_t pid,
     return FALSE;
 
   uint32_t psize = pok_partitions[pid].size;
+  uint32_t base_addr = pok_partitions[pid].base_addr;
+  uint32_t ptr_addr = (uint32_t)ptr;
 
   if (size > psize)
     return FALSE;
 
-  if ((uint32_t)ptr <= (psize - size))
+  /* Check if pointer is within [base_addr, base_addr + psize) */
+  if (ptr_addr >= base_addr && ptr_addr <= (base_addr + psize - size))
     return TRUE;
 
   return FALSE;

@@ -17,14 +17,22 @@
 #include <core/dependencies.h>
 
 #include <assert.h>
-#include <core/shutdown.h>
 #include <libc/stdio.h>
+
+#ifdef POK_NEEDS_SHUTDOWN
+#include <core/shutdown.h>
+#endif
 
 void __assert_failed(const char *assertion, const char *file, unsigned int line,
                      const char *function) {
   printf("%s:%u: %s%sAssertion `%s' failed.\n", file, line,
          function ? function : "", function ? ": " : "", assertion);
+#ifdef POK_NEEDS_SHUTDOWN
   pok_shutdown();
+#else
+  for (;;)
+    ;
+#endif
 }
 
 #endif

@@ -1,4 +1,6 @@
+ifeq ($(TOPDIR),)
 TOPDIR=		../../
+endif
 
 include $(TOPDIR)/misc/mk/config.mk
 -include $(TOPDIR)/misc/mk/common-$(ARCH).mk
@@ -25,7 +27,7 @@ LO_OBJS=	portqueueingcreate.o \
 			portutils.o \
 			portvirtualutils.o \
 			queueinit.o \
-			ressources.o 
+			ressources.o
 
 LO_DEPS=
 
@@ -44,4 +46,3 @@ depend:
 
 include $(TOPDIR)/misc/mk/rules-common.mk
 include $(TOPDIR)/misc/mk/rules-kernel.mk
-

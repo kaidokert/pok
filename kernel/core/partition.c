@@ -29,6 +29,14 @@
 #include <core/sched.h>
 #include <core/thread.h>
 #include <core/time.h>
+
+#ifdef POK_ARCH_ARM
+/* Need to declare ARM space functions for W^X security */
+extern pok_ret_t pok_create_code_region(uint8_t partition_id,
+                                        uint32_t code_addr, uint32_t code_size);
+extern pok_ret_t pok_space_set_bounds(uint8_t partition_id, uint32_t phys_base,
+                                      uint32_t size);
+#endif
 #include <dependencies.h>
 #include <errno.h>
 
@@ -116,6 +124,9 @@ void pok_partition_reinit(const uint8_t pid) {
 void pok_partition_setup_main_thread(const uint8_t pid) {
   uint32_t main_thread;
   pok_thread_attr_t attr;
+#ifdef POK_NEEDS_DEBUG
+  printf("Setting up main thread for partition %d\n", pid);
+#endif
 
   attr.entry = (uint32_t *)pok_partitions[pid].thread_main_entry;
   attr.priority = 1;
@@ -124,7 +135,11 @@ void pok_partition_setup_main_thread(const uint8_t pid) {
   attr.time_capacity = INFINITE_TIME_VALUE;
   attr.processor_affinity = 0;
 
-  pok_partition_thread_create(&main_thread, &attr, pid);
+  pok_ret_t ret = pok_partition_thread_create(&main_thread, &attr, pid);
+#ifdef POK_NEEDS_DEBUG
+  printf("Created main thread %d for partition %d (ret=%d)\n", main_thread, pid,
+         ret);
+#endif
   pok_partitions[pid].thread_main = main_thread;
 }
 
@@ -137,6 +152,9 @@ void pok_partition_setup_main_thread(const uint8_t pid) {
 pok_ret_t pok_partition_init() {
   uint8_t i;
   uint32_t threads_index = 0;
+#ifdef POK_NEEDS_DEBUG
+  printf("Starting pok_partition_init()\n");
+#endif
 
   const uint32_t partition_size[POK_CONFIG_NB_PARTITIONS] =
       POK_CONFIG_PARTITIONS_SIZE;
@@ -149,11 +167,20 @@ pok_ret_t pok_partition_init() {
 #endif
 
   for (i = 0; i < POK_CONFIG_NB_PARTITIONS; i++) {
+#ifdef POK_NEEDS_DEBUG
+    printf("Initializing partition %d\n", i);
+#endif
     uint32_t size = partition_size[i];
+#ifdef POK_NEEDS_DEBUG
+    printf("Allocating partition %d: size=0x%x\n", i, size);
+#endif
 #ifndef POK_CONFIG_PARTITIONS_LOADADDR
     uint32_t base_addr = (uint32_t)pok_bsp_mem_alloc(partition_size[i]);
 #else
     uint32_t base_addr = program_loadaddr[i];
+#endif
+#ifdef POK_NEEDS_DEBUG
+    printf("Partition %d: base_addr=0x%x\n", i, base_addr);
 #endif
     uint32_t program_entry;
     uint32_t base_vaddr = pok_space_base_vaddr(base_addr);
@@ -161,6 +188,11 @@ pok_ret_t pok_partition_init() {
     pok_partitions[i].base_addr = base_addr;
     pok_partitions[i].size = size;
     pok_partitions[i].sched = POK_SCHED_RR;
+
+#ifdef POK_NEEDS_DEBUG
+    printf("Setting partition %d: base_addr=0x%x, size=0x%x\n", i, base_addr,
+           size);
+#endif
 
 #ifdef POK_NEEDS_COVERAGE_INFOS
 #include <libc.h>
@@ -170,7 +202,35 @@ pok_ret_t pok_partition_init() {
 
     pok_partition_setup_scheduler(i);
 
+#ifdef POK_NEEDS_DEBUG
+    printf("About to create space for partition %d: base=0x%x, size=0x%x\n", i,
+           base_addr, size);
+#endif
+
+#ifdef POK_ARCH_ARM
+    /* For W^X security, only create MPU data region for the data portion
+     * Code region will be created separately with RX permissions
+     * Data region: base + 8KB, size 8KB (covers .data, .bss, stack)
+     *
+     * IMPORTANT: We pass the data region address to pok_create_space, which
+     * will set spaces[].phys_base to the data region address. This is incorrect
+     * for code region validation, so we manually fix it after.
+     */
+    uint32_t data_region_addr = base_addr + 0x2000; /* base + 8KB */
+    uint32_t data_region_size = 0x2000;             /* 8KB for data/stack */
+    pok_create_space(i, data_region_addr, data_region_size);
+
+    /* Fix phys_base to point to actual partition base for code region
+     * validation */
+    pok_space_set_bounds(i, base_addr, size);
+#else
+    /* Other architectures: create space for entire partition */
     pok_create_space(i, base_addr, size);
+#endif
+
+#ifdef POK_NEEDS_DEBUG
+    printf("Space created for partition %d\n", i);
+#endif
 
     pok_partitions[i].base_vaddr = base_vaddr;
     /* Set the memory space and so on */
@@ -179,7 +239,17 @@ pok_ret_t pok_partition_init() {
     pok_partitions[i].nthreads =
         ((uint32_t[])POK_CONFIG_PARTITIONS_NTHREADS)[i];
 
+#ifdef POK_NEEDS_DEBUG
+    printf(
+        "Partition %d: nthreads=%u (expected: partition 0=3, partition 1=2)\n",
+        i, pok_partitions[i].nthreads);
+#endif
+
     if (pok_partitions[i].nthreads < 1) {
+#ifdef POK_NEEDS_DEBUG
+      printf("ERROR: Partition %d has nthreads=%u < 1\n", i,
+             pok_partitions[i].nthreads);
+#endif
       pok_partition_error(i, POK_ERROR_KIND_PARTITION_CONFIGURATION);
     }
 
@@ -215,9 +285,9 @@ pok_ret_t pok_partition_init() {
 #ifdef POK_NEEDS_LOCKOBJECTS
     pok_partitions[i].lockobj_index_low = lockobj_index;
     pok_partitions[i].lockobj_index_high =
-        lockobj_index + ((uint8_t[])POK_CONFIG_PARTITIONS_NLOCKOBJECTS[i]);
+        lockobj_index + ((uint8_t[])POK_CONFIG_PARTITIONS_NLOCKOBJECTS)[i];
     pok_partitions[i].nlockobjs =
-        ((uint8_t[])POK_CONFIG_PARTITIONS_NLOCKOBJECTS[i]);
+        ((uint8_t[])POK_CONFIG_PARTITIONS_NLOCKOBJECTS)[i];
     lockobj_index = lockobj_index + pok_partitions[i].nlockobjs;
     /* Initialize mutexes stuff */
 #endif
@@ -228,11 +298,44 @@ pok_ret_t pok_partition_init() {
     pok_partitions[i].error_status.error_kind = POK_ERROR_KIND_INVALID;
     pok_partitions[i].error_status.msg_size = 0;
 
+#ifdef POK_ARCH_ARM
+    /* ARM: Partitions are linked at absolute addresses (0x20010000,
+     * 0x20014000), not at 0. No offset needed since ELF already contains
+     * correct addresses. */
+    pok_loader_load_partition(i, 0, &program_entry);
+#else
+    /* Other architectures: offset is difference between physical and virtual */
     pok_loader_load_partition(i, base_addr - base_vaddr, &program_entry);
+#endif
     /*
      * Load the partition in its address space
      */
     pok_partitions[i].thread_main_entry = program_entry;
+
+#ifdef POK_ARCH_ARM
+    /* W^X Security: Create separate code (RX) and data (RW) regions
+     * The partition linker script separates:
+     *   - Code region: .text and .rodata at base address (8KB, RX)
+     *   - Data region: .data, .bss, stack at base + 8KB (8KB, RW)
+     *
+     * Code region covers first 8KB (0x2000 bytes) of partition
+     * Data region has 8KB for .data, .bss, and thread stacks
+     * This enforces W^X: code is executable but not writable,
+     * data/stack is writable but not executable.
+     */
+    uint32_t code_addr = base_vaddr;
+    uint32_t code_size = 0x2000; /* 8KB for code (.text + .rodata) */
+
+    pok_ret_t result = pok_create_code_region(i, code_addr, code_size);
+    if (result != POK_ERRNO_OK) {
+      pok_cons_write("ERROR: Code region creation failed\n", 36);
+      return POK_ERRNO_EFAULT;
+    }
+
+    pok_cons_write(
+        "W^X enforced - partition has separate RX code and RW data regions\n",
+        67);
+#endif
 
     pok_partitions[i].lock_level = 0;
     pok_partitions[i].start_condition = NORMAL_START;
@@ -241,7 +344,13 @@ pok_ret_t pok_partition_init() {
     pok_instrumentation_partition_archi(i);
 #endif
 
+#ifdef POK_NEEDS_DEBUG
+    printf("About to setup main thread for partition %d\n", i);
+#endif
     pok_partition_setup_main_thread(i);
+#ifdef POK_NEEDS_DEBUG
+    printf("Finished setting up main thread for partition %d\n", i);
+#endif
   }
 
   return POK_ERRNO_OK;
@@ -257,6 +366,9 @@ pok_ret_t pok_partition_set_mode(const uint8_t pid,
                                  const pok_partition_mode_t mode) {
   switch (mode) {
   case POK_PARTITION_MODE_NORMAL:
+#ifdef POK_NEEDS_DEBUG
+    printf("Transitioning partition %d to NORMAL mode\n", pid);
+#endif
     /*
      * We first check that a partition that wants to go
      * to the NORMAL mode is currently in the INIT mode
@@ -266,7 +378,9 @@ pok_ret_t pok_partition_set_mode(const uint8_t pid,
       return POK_ERRNO_PARTITION_MODE;
     }
 
-    if (POK_SCHED_CURRENT_THREAD != POK_CURRENT_PARTITION.thread_main) {
+    /* Allow kernel thread to transition partitions during boot */
+    if (POK_SCHED_CURRENT_THREAD != KERNEL_THREAD &&
+        POK_SCHED_CURRENT_THREAD != pok_partitions[pid].thread_main) {
       return POK_ERRNO_PARTITION_MODE;
     }
 
@@ -274,36 +388,93 @@ pok_ret_t pok_partition_set_mode(const uint8_t pid,
 
     pok_thread_t *thread;
     unsigned int i;
+#ifdef POK_NEEDS_DEBUG
+    printf("Processing %d threads for partition %d (indices %d-%d)\n",
+           pok_partitions[pid].nthreads, pid,
+           pok_partitions[pid].thread_index_low,
+           pok_partitions[pid].thread_index_high - 1);
+#endif
     for (i = 0; i < pok_partitions[pid].nthreads; i++) {
-      thread = &(pok_threads[POK_CURRENT_PARTITION.thread_index_low + i]);
+      thread = &(pok_threads[pok_partitions[pid].thread_index_low + i]);
+#ifdef POK_NEEDS_DEBUG
+      printf("Thread %d: state=%d, period=%lld, wakeup_time=%llu",
+             pok_partitions[pid].thread_index_low + i, thread->state,
+             (long long)thread->period, thread->wakeup_time);
+      if (pok_partitions[pid].thread_index_low + i ==
+          pok_partitions[pid].thread_main) {
+        printf(" [MAIN THREAD]");
+      }
+      printf("\n");
+#endif
       if ((long long)thread->period == INFINITE_TIME_VALUE) {
+#ifdef POK_NEEDS_DEBUG
+        printf("  -> Thread %d has INFINITE period\n",
+               pok_partitions[pid].thread_index_low + i);
+#endif
         if (thread->state ==
             POK_STATE_DELAYED_START) { // delayed start, the delay is in the
                                        // wakeup time
+#ifdef POK_NEEDS_DEBUG
+          printf("  -> Transitioning infinite period thread %d from "
+                 "DELAYED_START\n",
+                 pok_partitions[pid].thread_index_low + i);
+#endif
           if (!thread->wakeup_time) {
             thread->state = POK_STATE_RUNNABLE;
-          } else {
-            thread->state = POK_STATE_WAITING;
-          }
-          thread->wakeup_time += POK_GETTICK();
-          if (thread->time_capacity > 0)
-            thread->end_time = thread->wakeup_time + thread->time_capacity;
-        }
-      } else {
-        if (thread->state ==
-            POK_STATE_DELAYED_START) { // delayed start, the delay is in the
-                                       // wakeup time
-          if (!thread->wakeup_time) {
-            thread->state = POK_STATE_RUNNABLE;
-            thread->wakeup_time += POK_GETTICK();
+            thread->wakeup_time = POK_GETTICK();
             if (thread->time_capacity > 0)
               thread->end_time = thread->wakeup_time + thread->time_capacity;
+#ifdef POK_NEEDS_DEBUG
+            printf("  -> Infinite period thread %d set to RUNNABLE\n",
+                   pok_partitions[pid].thread_index_low + i);
+#endif
+          } else {
+#ifdef POK_NEEDS_DEBUG
+            printf(
+                "  -> Infinite period thread %d has delayed wakeup_time=%lld\n",
+                pok_partitions[pid].thread_index_low + i,
+                (long long)thread->wakeup_time);
+#endif
+            thread->state = POK_STATE_WAITING;
+          }
+        } else {
+#ifdef POK_NEEDS_DEBUG
+          printf("  -> Thread %d not in DELAYED_START (state=%d)\n",
+                 pok_partitions[pid].thread_index_low + i, thread->state);
+#endif
+        }
+      } else {
+#ifdef POK_NEEDS_DEBUG
+        printf("  -> Thread %d does not have INFINITE period (period=%lld)\n",
+               pok_partitions[pid].thread_index_low + i,
+               (long long)thread->period);
+#endif
+        if (thread->state ==
+            POK_STATE_DELAYED_START) { // delayed start, the delay is in the
+                                       // wakeup time
+#ifdef POK_NEEDS_DEBUG
+          printf("  -> Transitioning periodic thread %d from DELAYED_START\n",
+                 pok_partitions[pid].thread_index_low + i);
+#endif
+          if (!thread->wakeup_time) {
+            thread->state = POK_STATE_RUNNABLE;
+            thread->wakeup_time = POK_GETTICK();
+            if (thread->time_capacity > 0)
+              thread->end_time = thread->wakeup_time + thread->time_capacity;
+#ifdef POK_NEEDS_DEBUG
+            printf("  -> Periodic thread %d set to RUNNABLE\n",
+                   pok_partitions[pid].thread_index_low + i);
+#endif
           } else {
             thread->next_activation = thread->wakeup_time +
                                       POK_CONFIG_SCHEDULING_MAJOR_FRAME +
                                       POK_CURRENT_PARTITION.activation;
             thread->end_time = thread->next_activation + thread->time_capacity;
             thread->state = POK_STATE_WAIT_NEXT_ACTIVATION;
+#ifdef POK_NEEDS_DEBUG
+            printf("  -> Periodic thread %d set to WAIT_NEXT_ACTIVATION\n",
+                   pok_partitions[pid].thread_index_low + i);
+#endif
           }
         }
       }

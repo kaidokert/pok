@@ -15,6 +15,7 @@
 #ifdef POK_NEEDS_DEBUG
 
 #include <arch.h>
+#include <bsp.h>
 #include <core/cons.h>
 #include <core/debug.h>
 #include <core/multiprocessing.h>
@@ -75,11 +76,17 @@ void pok_debug_print_current_state() {
 }
 
 void pok_fatal(const char *message) {
-  pok_write("FATAL ERROR: \n", 13);
-  pok_write(message, debug_strlen(message));
+  pok_cons_write("FATAL ERROR: ", 13);
+  pok_cons_write(message, debug_strlen(message));
+  pok_cons_write("\n", 1);
 
   POK_DEBUG_PRINT_CURRENT_STATE
-  pok_arch_idle();
+
+  /* Disable interrupts and halt completely */
+  pok_arch_preempt_disable();
+  while (1) {
+    __asm volatile("wfi");
+  }
 }
 
 #endif /* POK_CONFIG_NEEDS_DEBUG */

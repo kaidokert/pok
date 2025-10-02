@@ -1,4 +1,6 @@
+ifeq ($(TOPDIR),)
 TOPDIR=		../../
+endif
 
 include $(TOPDIR)/misc/mk/config.mk
 -include $(TOPDIR)/misc/mk/common-$(ARCH).mk
@@ -24,4 +26,3 @@ depend:
 
 include $(TOPDIR)/misc/mk/rules-common.mk
 include $(TOPDIR)/misc/mk/rules-kernel.mk
-

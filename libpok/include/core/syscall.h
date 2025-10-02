@@ -112,7 +112,7 @@ typedef struct {
   uint32_t arg5;
 } pok_syscall_args_t;
 
-#ifdef POK_ARCH_X86
+#if defined(POK_ARCH_X86)
 /*
  * To reduce the number of functions and improve code coverage, we define
  * only one function to perform the syscall, the other are just maccro
@@ -138,6 +138,8 @@ pok_ret_t pok_do_syscall(pok_syscall_id_t syscall_id, pok_syscall_args_t *args);
 #define pok_syscall5(sid, arg1, arg2, arg3, arg4, arg5)                        \
   pok_do_syscall(sid, &((pok_syscall_args_t){5, arg1, arg2, arg3, arg4, arg5}))
 #else
+
+pok_ret_t pok_do_syscall(pok_syscall_id_t syscall_id, pok_syscall_args_t *args);
 
 pok_ret_t pok_syscall0(pok_syscall_id_t syscall_id);
 

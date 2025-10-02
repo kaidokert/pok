@@ -1,0 +1,31 @@
+# ARM Makefile for mutexes example
+export POK_PATH=$(CURDIR)/../..
+export ARCH=arm
+export BSP=stm32f4
+
+include $(POK_PATH)/misc/mk/config.mk
+include $(POK_PATH)/misc/mk/common-$(ARCH).mk
+
+TARGET=$(CURDIR)/pok.elf
+PARTITIONS=pr1/pr1.elf pr2/pr2.elf
+KERNEL=kernel/kernel.lo
+PARTDIRS=pr1 pr2
+
+all: build-kernel partitions $(TARGET)
+
+build-kernel:
+	$(CD) kernel && $(MAKE) -f Makefile.arm ARCH=$(ARCH) BSP=$(BSP)
+
+partitions:
+	for d in $(PARTDIRS); do $(MAKE) -C $$d clean all || exit 1; done
+
+$(TARGET): $(KERNEL) $(PARTITIONS)
+	$(ECHO) $(ECHO_FLAGS) $(ECHO_FLAGS_ONELINE) "[LINK] $@"
+	$(LD) $(LDFLAGS) -T $(POK_PATH)/misc/ldscripts/$(ARCH)/$(BSP)/kernel.lds -o $@ $+
+	if test $$? -eq 0; then $(ECHO) $(ECHO_FLAGS) $(ECHO_GREEN) " OK"; else $(ECHO) $(ECHO_FLAGS) $(ECHO_RED) " KO"; fi
+
+clean:
+	$(RM) $(TARGET) $(PARTITIONS) $(KERNEL)
+	for d in $(PARTDIRS) kernel; do $(MAKE) -C $$d clean || true; done
+
+include $(POK_PATH)/misc/mk/rules-common.mk

@@ -46,6 +46,12 @@ typedef struct {
   uint32_t msg_size;
 } pok_error_status_t;
 
+typedef struct {
+  uint32_t thread;
+  uint32_t error;
+  pok_time_t when;
+} pok_error_report_t;
+
 pok_ret_t pok_partition_error_set_ready(pok_error_status_t *);
 void pok_error_ignore();
 void pok_error_declare(const uint8_t error);

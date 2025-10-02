@@ -15,9 +15,13 @@
 #ifndef __POK_TYPES_H__
 #define __POK_TYPES_H__
 
-#ifdef POK_ARCH_SPARC
+#if defined(POK_ARCH_SPARC)
 #include <arch/sparc/types.h>
-#elif POK_ARCH == x86
+#elif defined(POK_ARCH_ARM)
+#include <arch/arm/types.h>
+#elif defined(POK_ARCH_PPC)
+#include <arch/ppc/types.h>
+#elif defined(POK_ARCH_X86)
 #include <arch/x86/types.h>
 #endif
 
@@ -37,8 +41,22 @@ typedef uint8_t pok_buffer_id_t;
 typedef uint8_t pok_blackboard_id_t;
 typedef uint8_t pok_lockobj_id_t;
 typedef uint8_t pok_sem_id_t;
+typedef uint8_t pok_sem_status_t;
 typedef uint8_t pok_event_id_t;
 typedef uint8_t pok_partition_id_t;
+typedef uint8_t pok_mutex_id_t;
 typedef uint16_t pok_sem_value_t;
+typedef uint64_t pok_time_t;
+
+/* Configuration constants for ARM builds */
+#ifdef POK_ARCH_ARM
+#ifndef POK_CONFIG_NB_THREADS
+#define POK_CONFIG_NB_THREADS 10
+#endif
+#ifndef POK_CONFIG_NB_PARTITIONS
+#define POK_CONFIG_NB_PARTITIONS 2
+#endif
+#define POK_LOCKING_DISCIPLINE_FIFO 0
+#endif
 
 #endif

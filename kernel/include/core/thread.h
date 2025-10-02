@@ -35,10 +35,11 @@
 #define POK_THREAD_MAX_PRIORITY 200
 
 /*
- * DEFAULT_STACK_SIZE if the stack size of regulard threads
+ * DEFAULT_STACK_SIZE if the stack size of regular threads
  * IDLE_STACK_SIZE is the stack size of the idle thread
+ * For ARM W^X: Reduced to 2KB to fit 4 threads in 8KB data region
  */
-#define DEFAULT_STACK_SIZE 8192
+#define DEFAULT_STACK_SIZE 2048
 #define IDLE_STACK_SIZE DEFAULT_STACK_SIZE
 
 #ifndef POK_USER_STACK_SIZE

@@ -27,6 +27,7 @@
 
 #include <arch.h>
 #include <assert.h>
+#include <core/error.h>
 #include <core/lockobj.h>
 #include <core/partition.h>
 #include <core/sched.h>
@@ -168,10 +169,20 @@ pok_ret_t pok_lockobj_eventwait(pok_lockobj_t *obj, uint64_t timeout) {
     return POK_ERRNO_EINVAL;
   }
 
-  if (pok_lockobj_unlock(obj, NULL)) {
-    SPIN_UNLOCK(obj->eventspin);
-    return POK_ERRNO_UNAVAILABLE;
+  /* Check if mutex is already locked (current_value == 0)
+   * POK events follow the monitor pattern (mutex + condition variable):
+   * - If caller locked the mutex first, unlock it before waiting
+   * - If caller didn't lock (Ocarina-generated code), skip unlock/relock
+   */
+  bool_t was_locked = (obj->current_value == 0);
+
+  if (was_locked) {
+    if (pok_lockobj_unlock(obj, NULL)) {
+      SPIN_UNLOCK(obj->eventspin);
+      return POK_ERRNO_UNAVAILABLE;
+    }
   }
+
 #ifdef POK_NEEDS_ASSERT
   pok_ret_t ret =
       pok_lockobj_enqueue(&obj->event_fifo, POK_SCHED_CURRENT_THREAD,
@@ -203,12 +214,14 @@ pok_ret_t pok_lockobj_eventwait(pok_lockobj_t *obj, uint64_t timeout) {
     ret_wait = POK_ERRNO_OK;
   }
 
-  pok_ret_t ret_lock = pok_lockobj_lock(obj, NULL);
+  /* Only re-lock if we unlocked earlier */
+  if (was_locked) {
+    pok_ret_t ret_lock = pok_lockobj_lock(obj, NULL);
+    if (ret_lock != POK_ERRNO_OK)
+      return ret_lock;
+  }
 
-  if (ret_lock != POK_ERRNO_OK)
-    return ret_lock;
-  else
-    return ret_wait;
+  return ret_wait;
 }
 
 pok_ret_t pok_lockobj_eventsignal(pok_lockobj_t *obj) {

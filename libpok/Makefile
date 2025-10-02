@@ -1,4 +1,5 @@
 include ../misc/mk/config.mk
+export POK_BUILD_LIBPOK=1
 -include ../misc/mk/common-$(ARCH).mk
 
 LO_DEPS=	arch/arch.lo \

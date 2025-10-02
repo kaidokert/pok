@@ -1,4 +1,6 @@
+ifeq ($(TOPDIR),)
 TOPDIR=		../../
+endif
 
 include $(TOPDIR)/misc/mk/config.mk
 -include $(TOPDIR)/misc/mk/common-$(ARCH).mk

@@ -44,7 +44,10 @@ void pok_error_handler_worker() {
     msg = status.msg;
   } else {
     msg = __builtin_alloca(status.msg_size + 1);
-    memcpy(msg, status.msg, status.msg_size);
+    /* Replace memcpy with simple loop to avoid ARM/Thumb linking issues */
+    for (uint32_t i = 0; i < status.msg_size; i++) {
+      msg[i] = status.msg[i];
+    }
     *(msg + status.msg_size) = '\0';
   }
   printf("Error message: %s\n", msg);

@@ -33,6 +33,7 @@ LO_OBJS=	allocator.o \
 			semstatus.o \
 			semwait.o \
 			shutdown.o \
+			syscall_stubs.o \
 			threadcreate.o \
 			threadattrinit.o \
 			threadperiod.o \

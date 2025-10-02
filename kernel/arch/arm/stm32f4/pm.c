@@ -1,0 +1,82 @@
+/*
+ *                               POK header
+ *
+ * The following file is a part of the POK project. Any modification should
+ * be made according to the POK licence. You CANNOT use this file or a part
+ * of a file for your own project.
+ *
+ * For more information on the POK licence, please see our LICENCE FILE
+ *
+ * Please follow the coding guidelines described in doc/CODING_GUIDELINES
+ *
+ *                                      Copyright (c) 2007-2025 POK team
+ */
+
+/**
+ * \file    arch/arm/stm32f4/pm.c
+ * \author  POK team
+ * \brief   ARM STM32F4 Physical Memory Management (like x86)
+ */
+
+#include <errno.h>
+#include <libc.h>
+#include <types.h>
+
+#include "pm.h"
+
+extern void *__pok_end;
+
+uint32_t pok_arm_pm_heap_start;
+uint32_t pok_arm_pm_brk;
+uint32_t pok_arm_pm_heap_end;
+
+int pok_pm_init() {
+#ifdef POK_NEEDS_DEBUG
+  printf("pok_pm_init: Initializing heap variables\n");
+#endif
+
+  // Use BSP-defined user memory region for heap
+  // This ensures alignment with BSP memory allocation expectations
+  // Reserve space for partitions (2 × 16KB = 32KB) before heap
+  pok_arm_pm_heap_start = pok_arm_pm_brk =
+      0x20010000; // POK_USER_MEMORY_BASE + 32KB
+  pok_arm_pm_heap_end =
+      0x20020000; // POK_USER_MEMORY_BASE + POK_USER_MEMORY_SIZE (end of SRAM)
+
+#ifdef POK_NEEDS_DEBUG
+  printf("pok_pm_init: heap_start=0x%x, brk=0x%x, heap_end=0x%x\n",
+         pok_arm_pm_heap_start, pok_arm_pm_brk, pok_arm_pm_heap_end);
+#endif
+
+  return (POK_ERRNO_OK);
+}
+
+/**
+ * Simple sbrk implementation for ARM with boundary checking
+ */
+uint32_t pok_pm_sbrk(uint32_t increment) {
+  uint32_t addr;
+
+#ifdef POK_NEEDS_DEBUG
+  printf("pok_pm_sbrk: increment=0x%x, brk=0x%x, end=0x%x\n", increment,
+         pok_arm_pm_brk, pok_arm_pm_heap_end);
+#endif
+
+  // Check if allocation would exceed heap bounds
+  if (pok_arm_pm_brk + increment > pok_arm_pm_heap_end) {
+#ifdef POK_NEEDS_DEBUG
+    printf("pok_pm_sbrk: FAILED - would exceed heap bounds\n");
+#endif
+    return (0); // Return NULL for out-of-memory
+  }
+
+  addr = pok_arm_pm_brk;
+  pok_arm_pm_brk += increment;
+
+#ifdef POK_NEEDS_DEBUG
+  printf("pok_pm_sbrk: SUCCESS - allocated at 0x%x, new_brk=0x%x\n", addr,
+         pok_arm_pm_brk);
+#endif
+
+  return (addr);
+}

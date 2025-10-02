@@ -97,6 +97,11 @@ void pok_thread_init(void) {
 
   total_threads = 0;
 
+#ifdef POK_NEEDS_DEBUG
+  printf("[TRACE] pok_thread_init START - Thread 0 state: %d\n",
+         pok_threads[0].state);
+#endif
+
   for (j = 0; j < POK_CONFIG_NB_PARTITIONS; j++) {
     total_threads = total_threads + pok_partitions[j].nthreads;
   }
@@ -108,16 +113,32 @@ void pok_thread_init(void) {
     pok_kernel_error(POK_ERROR_KIND_KERNEL_CONFIG);
   }
   for (i = 0; i < POK_CONFIG_NB_THREADS; ++i) {
-    pok_threads[i].period = INFINITE_TIME_VALUE;
-    pok_threads[i].deadline = 0;
-    pok_threads[i].time_capacity = INFINITE_TIME_VALUE;
-    pok_threads[i].remaining_time_capacity = INFINITE_TIME_VALUE;
-    pok_threads[i].next_activation = 0;
-    pok_threads[i].wakeup_time = 0;
-    pok_threads[i].state = POK_STATE_STOPPED;
-    pok_threads[i].processor_affinity = 0;
+    /* Only initialize threads that haven't been created yet */
+    if (pok_threads[i].state != POK_STATE_DELAYED_START) {
+#ifdef POK_NEEDS_DEBUG
+      printf("pok_thread_init: resetting thread %d (state was %d)\n", i,
+             pok_threads[i].state);
+#endif
+      pok_threads[i].period = INFINITE_TIME_VALUE;
+      pok_threads[i].deadline = 0;
+      pok_threads[i].time_capacity = INFINITE_TIME_VALUE;
+      pok_threads[i].remaining_time_capacity = INFINITE_TIME_VALUE;
+      pok_threads[i].next_activation = 0;
+      pok_threads[i].wakeup_time = 0;
+      pok_threads[i].state = POK_STATE_STOPPED;
+      pok_threads[i].processor_affinity = 0;
+    } else {
+#ifdef POK_NEEDS_DEBUG
+      printf("pok_thread_init: preserving thread %d (state=%d DELAYED_START)\n",
+             i, pok_threads[i].state);
+#endif
+    }
   }
   pok_idle_thread_init();
+#ifdef POK_NEEDS_DEBUG
+  printf("[TRACE] pok_thread_init END - Thread 0 state: %d\n",
+         pok_threads[0].state);
+#endif
 }
 
 /**
@@ -130,6 +151,11 @@ pok_ret_t pok_partition_thread_create(uint32_t *thread_id,
                                       const pok_thread_attr_t *attr,
                                       const uint8_t partition_id) {
   uint32_t stack_vaddr;
+#ifdef POK_NEEDS_DEBUG
+  printf("Creating thread in partition %d\n", partition_id);
+  printf("[TRACE] Before creation - Thread 0 state: %d\n",
+         pok_threads[0].state);
+#endif
   /**
    * We can create a thread only if the partition is in INIT mode
    */
@@ -193,11 +219,20 @@ pok_ret_t pok_partition_thread_create(uint32_t *thread_id,
   stack_vaddr = pok_thread_stack_addr(
       partition_id, pok_partitions[partition_id].thread_index);
 
-  pok_threads[id].state = POK_STATE_RUNNABLE;
+  pok_threads[id].state = POK_STATE_DELAYED_START;
   pok_threads[id].wakeup_time = 0;
+#ifdef POK_NEEDS_DEBUG
+  printf("Thread %d set to DELAYED_START (state=%d)\n", id,
+         pok_threads[id].state);
+  printf("[TRACE] After setting - Thread 0 state: %d\n", pok_threads[0].state);
+#endif
+  /* Convert absolute entry address to partition-relative offset
+   * Clear Thumb bit (LSB) before calculating offset */
+  uint32_t entry_abs = (uint32_t)attr->entry & ~1U; /* Clear Thumb bit */
+  uint32_t entry_rel = entry_abs - pok_partitions[partition_id].base_addr;
   pok_threads[id].sp = pok_space_context_create(
-      partition_id, (uint32_t)attr->entry, pok_threads[id].processor_affinity,
-      stack_vaddr, 0xdead, 0xbeaf);
+      partition_id, entry_rel, pok_threads[id].processor_affinity, stack_vaddr,
+      0xdead, 0xbeaf);
   /*
    *  FIXME : current debug session about exceptions-handled
   printf ("thread sp=0x%x\n", pok_threads[id].sp);
@@ -276,8 +311,13 @@ pok_ret_t pok_thread_restart(const uint32_t tid) {
    * At this time, we build a new context for the thread.
    * It is not the best solution but it works at this time
    */
+  /* Convert absolute entry address to partition-relative offset
+   * Clear Thumb bit (LSB) before calculating offset */
+  uint32_t restart_entry_abs = (uint32_t)pok_threads[tid].entry & ~1U;
+  uint32_t restart_entry_rel =
+      restart_entry_abs - pok_partitions[pok_threads[tid].partition].base_addr;
   pok_threads[tid].sp = pok_space_context_create(
-      pok_threads[tid].partition, (uint32_t)pok_threads[tid].entry,
+      pok_threads[tid].partition, restart_entry_rel,
       pok_threads[tid].processor_affinity, pok_threads[tid].init_stack_addr,
       0xdead, 0xbeaf);
 

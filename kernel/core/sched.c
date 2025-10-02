@@ -18,16 +18,34 @@
  **\\author Julien Delange
  */
 
+/* ARM architecture now supported */
+
 #include <arch.h>
 #include <assert.h>
 #include <types.h>
 
+#include <bsp.h>
+#include <core/multiprocessing.h>
 #include <core/sched.h>
 #include <core/thread.h>
 #include <core/time.h>
 
+/* ARM single-core thread definitions */
+#ifndef KERNEL_THREAD
+#define KERNEL_THREAD (POK_CONFIG_NB_THREADS - 1)
+#endif
+#ifndef IDLE_THREAD
+#define IDLE_THREAD (POK_CONFIG_NB_THREADS - 2 - (uint32_t)(pok_get_proc_id()))
+#endif
+
 #include <arch.h>
+#ifdef POK_ARCH_X86
 #include <arch/x86/ipi.h>
+#endif
+#ifdef POK_ARCH_ARM
+#include <arch/arm/ipi.h>
+#include <arch/arm/rendezvous.h>
+#endif
 #include <core/partition.h>
 
 #ifdef POK_NEEDS_MIDDLEWARE
@@ -93,6 +111,9 @@ void pok_sched_thread_switch(void);
  *\\brief Init scheduling service
  */
 
+/* Flag to prevent scheduling before initialization is complete */
+static uint8_t pok_sched_initialized = 0;
+
 void pok_sched_init(void) {
   /*
    * We check that the total time of time frame
@@ -120,6 +141,70 @@ void pok_sched_init(void) {
   pok_sched_next_deadline = pok_sched_slots[0];
   pok_sched_next_flush = 0;
   pok_current_partition = pok_sched_slots_allocation[0];
+
+  /* ARM: Enable initial partition's MPU regions before scheduling starts */
+#ifdef POK_ARCH_ARM
+  pok_space_switch(POK_CONFIG_NB_PARTITIONS, /* invalid old partition */
+                   pok_current_partition);
+
+#ifdef POK_NEEDS_DEBUG
+  /* Dump all MPU regions for debugging */
+  pok_cons_write("\n=== All MPU Regions ===\n", 24);
+
+/* Access MPU registers directly */
+#define MPU_BASE 0xE000ED90
+#define MPU_TYPE_REG (*((volatile uint32_t *)(MPU_BASE + 0x00)))
+#define MPU_CTRL_REG (*((volatile uint32_t *)(MPU_BASE + 0x04)))
+#define MPU_RNR_REG (*((volatile uint32_t *)(MPU_BASE + 0x08)))
+#define MPU_RBAR_REG (*((volatile uint32_t *)(MPU_BASE + 0x0C)))
+#define MPU_RASR_REG (*((volatile uint32_t *)(MPU_BASE + 0x10)))
+
+  uint32_t mpu_ctrl = MPU_CTRL_REG;
+  pok_cons_write("MPU_CTRL=0x", 11);
+  char ctrl_buf[9];
+  for (int j = 7; j >= 0; j--) {
+    ctrl_buf[j] = "0123456789ABCDEF"[(mpu_ctrl >> ((7 - j) * 4)) & 0xF];
+  }
+  pok_cons_write(ctrl_buf, 8);
+  pok_cons_write(mpu_ctrl & 1 ? " [ENABLED]\n" : " [DISABLED]\n", 12);
+
+  uint8_t num_regions = (MPU_TYPE_REG >> 8) & 0xFF;
+
+  for (uint8_t i = 0; i < num_regions; i++) {
+    MPU_RNR_REG = i;
+    uint32_t rbar = MPU_RBAR_REG;
+    uint32_t rasr = MPU_RASR_REG;
+
+    if (rasr & 1) { /* If enabled */
+      char buf[80];
+      pok_cons_write("Region ", 7);
+      buf[0] = '0' + i;
+      buf[1] = ':';
+      buf[2] = ' ';
+      pok_cons_write(buf, 3);
+
+      pok_cons_write("RBAR=0x", 7);
+      for (int j = 7; j >= 0; j--) {
+        buf[j] = "0123456789ABCDEF"[(rbar >> ((7 - j) * 4)) & 0xF];
+      }
+      pok_cons_write(buf, 8);
+
+      pok_cons_write(" RASR=0x", 8);
+      for (int j = 7; j >= 0; j--) {
+        buf[j] = "0123456789ABCDEF"[(rasr >> ((7 - j) * 4)) & 0xF];
+      }
+      pok_cons_write(buf, 8);
+
+      pok_cons_write(rasr & (1 << 28) ? " [XN]" : " [EXEC]", 7);
+      pok_cons_write("\n", 1);
+    }
+  }
+  pok_cons_write("======================\n\n", 24);
+#endif
+#endif
+
+  /* Enable scheduling after initialization */
+  pok_sched_initialized = 1;
 }
 
 uint8_t pok_sched_get_priority_min(const pok_sched_t sched_type) {
@@ -204,9 +289,47 @@ uint32_t pok_elect_thread(uint8_t new_partition_id) {
 
 #if defined(POK_NEEDS_LOCKOBJECTS) || defined(POK_NEEDS_PORTS_QUEUEING) ||     \
     defined(POK_NEEDS_PORTS_SAMPLING)
-      if ((thread->state == POK_STATE_WAITING) &&
-          (thread->wakeup_time <= now)) {
-        thread->state = POK_STATE_RUNNABLE;
+      if (thread->state == POK_STATE_WAITING) {
+#ifdef POK_NEEDS_DEBUG
+        static uint32_t wakeup_check_count = 0;
+        if ((wakeup_check_count % 500) == 0) {
+          int j;
+          char buf[30];
+          uint64_t wt = thread->wakeup_time;
+          pok_cons_write("WAKEUP_CHECK: wakeup=", 21);
+          /* Print wakeup_time in hex */
+          buf[0] = '0';
+          buf[1] = 'x';
+          for (j = 0; j < 8; j++) {
+            uint8_t nibble = (wt >> (28 - j * 4)) & 0xF;
+            buf[2 + j] = (nibble < 10) ? ('0' + nibble) : ('A' + nibble - 10);
+          }
+          buf[10] = ' ';
+          buf[11] = 'n';
+          buf[12] = 'o';
+          buf[13] = 'w';
+          buf[14] = '=';
+          buf[15] = '0';
+          buf[16] = 'x';
+          for (j = 0; j < 8; j++) {
+            uint8_t nibble = (now >> (28 - j * 4)) & 0xF;
+            buf[17 + j] = (nibble < 10) ? ('0' + nibble) : ('A' + nibble - 10);
+          }
+          buf[25] = '\n';
+          pok_cons_write(buf, 26);
+        }
+        wakeup_check_count++;
+#endif
+        if (thread->wakeup_time <= now) {
+          thread->state = POK_STATE_RUNNABLE;
+#ifdef POK_NEEDS_DEBUG
+          pok_cons_write("THREAD_WOKEN: thread=", 21);
+          char buf2[3];
+          buf2[0] = '0' + i;
+          buf2[1] = '\n';
+          pok_cons_write(buf2, 2);
+#endif
+        }
       }
 #endif
 
@@ -383,7 +506,46 @@ void pok_sched_context_switch(const uint32_t elected_id,
   uint32_t *current_sp;
   uint32_t new_sp;
 
-  if (POK_SCHED_CURRENT_THREAD == elected_id) {
+  /* CRITICAL FIX: On first run, POK_SCHED_CURRENT_THREAD may equal elected_id
+   * but the thread has never actually executed. We MUST context switch if the
+   * thread has never run (sp == 0 means no context exists yet).
+   *
+   * This was causing threads to never start - scheduler thought they were
+   * already running when they had never been context-switched to.
+   *
+   * Skip context switch ONLY if: same thread AND thread has valid context (sp
+   * != 0)
+   */
+  pok_bool_t skip_switch = (POK_SCHED_CURRENT_THREAD == elected_id) &&
+                           (pok_threads[elected_id].sp != 0);
+
+#ifdef POK_NEEDS_DEBUG
+  static uint32_t ctx_call = 0;
+  if ((ctx_call % 100) == 0) {
+    pok_cons_write("pok_sched_context_switch: curr=", 32);
+    char buf[16];
+    buf[0] = '0' + POK_SCHED_CURRENT_THREAD;
+    buf[1] = ' ';
+    buf[2] = 'e';
+    buf[3] = 'l';
+    buf[4] = '=';
+    buf[5] = '0' + elected_id;
+    buf[6] = ' ';
+    buf[7] = 's';
+    buf[8] = 'p';
+    buf[9] = '=';
+    pok_cons_write(buf, 10);
+    uint32_t sp_val = pok_threads[elected_id].sp;
+    for (int i = 7; i >= 0; i--) {
+      buf[i] = "0123456789ABCDEF"[(sp_val >> ((7 - i) * 4)) & 0xF];
+    }
+    pok_cons_write(buf, 8);
+    pok_cons_write(skip_switch ? " SKIP\n" : " SWITCH\n", 8);
+  }
+  ctx_call++;
+#endif
+
+  if (skip_switch) {
     if (!is_source_processor)
       pok_end_ipi();
 
@@ -406,6 +568,18 @@ void pok_sched_context_switch(const uint32_t elected_id,
 
 void pok_sched_thread(bool_t is_source_processor) {
   uint8_t elected_thread = pok_elect_thread(POK_SCHED_CURRENT_PARTITION);
+
+#ifdef POK_NEEDS_DEBUG
+  static uint32_t call_count = 0;
+  if ((call_count % 100) == 0) {
+    pok_cons_write("pok_sched_thread: elected=", 26);
+    char buf[3];
+    buf[0] = '0' + elected_thread;
+    buf[1] = '\n';
+    pok_cons_write(buf, 2);
+  }
+  call_count++;
+#endif
 
   if (CURRENT_THREAD(pok_partitions[POK_SCHED_CURRENT_PARTITION]) !=
       elected_thread) {
@@ -695,6 +869,12 @@ void pok_sched_lock_current_thread_timed(const uint64_t time) {
 void pok_sched_stop_self(void) {
   POK_CURRENT_THREAD.state = POK_STATE_STOPPED;
   pok_sched_thread(TRUE);
+
+  // Never return to stopped thread - infinite loop
+  while (1) {
+    // Should never reach here after context switch
+    pok_sched_thread(FALSE);
+  }
 }
 
 void pok_sched_stop_thread(const uint32_t tid) {
@@ -737,3 +917,41 @@ uint32_t pok_sched_get_current(uint32_t *thread_id) {
   *thread_id = POK_SCHED_CURRENT_THREAD;
   return POK_ERRNO_OK;
 }
+
+/* Main scheduler entry point called from timer interrupts */
+void pok_sched(void) {
+#ifdef POK_NEEDS_DEBUG
+  static uint32_t sched_calls = 0;
+  if ((sched_calls % 100) == 0) {
+    pok_cons_write("pok_sched called\n", 17);
+  }
+  sched_calls++;
+#endif
+
+  /* Do not schedule until initialization is complete */
+  if (!pok_sched_initialized) {
+#ifdef POK_NEEDS_DEBUG
+    static uint32_t uninit_calls = 0;
+    if ((uninit_calls % 100) == 0) {
+      pok_cons_write("pok_sched: NOT INITIALIZED\n", 27);
+    }
+    uninit_calls++;
+#endif
+    return;
+  }
+
+  /* Check if we're in multiprocessing mode or single processor */
+#if POK_CONFIG_NB_PROCESSORS > 1
+  /* Multi-processor scheduling */
+  pok_global_sched();
+#else
+  /* Single processor scheduling - elect partition and thread directly */
+  uint8_t elected_partition = pok_elect_partition();
+  if (elected_partition != POK_SCHED_CURRENT_PARTITION) {
+    POK_SCHED_CURRENT_PARTITION = elected_partition;
+  }
+  pok_sched_thread(TRUE);
+#endif
+}
+
+/* End of scheduler implementation - now available for ARM */

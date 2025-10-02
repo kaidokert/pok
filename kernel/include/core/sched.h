@@ -82,4 +82,6 @@ void pok_sched_activate_error_thread(void);
 
 uint32_t pok_sched_get_current(uint32_t *thread_id);
 
+void pok_sched(void); /* Main scheduler entry point from timer interrupts */
+
 #endif /* !__POK_SCHED_H__ */

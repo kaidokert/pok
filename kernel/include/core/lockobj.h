@@ -18,6 +18,13 @@
 #include <arch.h>
 #include <types.h>
 
+#ifdef POK_ARCH_ARM
+#include <arch/arm/spinlock.h>
+#else
+/* Fallback spinlock definition for ARM */
+typedef unsigned int pok_spinlock_t;
+#endif
+
 #ifndef POK_CONFIG_NB_LOCKOBJECTS
 #define POK_CONFIG_NB_LOCKOBJECTS 0
 #endif

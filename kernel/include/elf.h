@@ -52,4 +52,73 @@ typedef struct {
   Elf32_Word p_align;  /* Segment alignment */
 } Elf32_Phdr;
 
+#define PT_LOAD 1 /* Loadable program segment */
+
+/* Section header */
+typedef struct {
+  Elf32_Word sh_name;      /* Section name (string tbl index) */
+  Elf32_Word sh_type;      /* Section type */
+  Elf32_Word sh_flags;     /* Section flags */
+  Elf32_Addr sh_addr;      /* Section virtual addr at execution */
+  Elf32_Off sh_offset;     /* Section file offset */
+  Elf32_Word sh_size;      /* Section size in bytes */
+  Elf32_Word sh_link;      /* Link to another section */
+  Elf32_Word sh_info;      /* Additional section information */
+  Elf32_Word sh_addralign; /* Section alignment */
+  Elf32_Word sh_entsize;   /* Entry size if section holds table */
+} Elf32_Shdr;
+
+/* Relocation entry with addend (RELA) */
+typedef struct {
+  Elf32_Addr r_offset; /* Address */
+  Elf32_Word r_info;   /* Relocation type and symbol index */
+  int32_t r_addend;    /* Addend */
+} Elf32_Rela;
+
+/* Relocation entry without addend (REL) */
+typedef struct {
+  Elf32_Addr r_offset; /* Address */
+  Elf32_Word r_info;   /* Relocation type and symbol index */
+} Elf32_Rel;
+
+/* Section header types */
+#define SHT_NULL 0     /* Section header table entry unused */
+#define SHT_PROGBITS 1 /* Program data */
+#define SHT_SYMTAB 2   /* Symbol table */
+#define SHT_STRTAB 3   /* String table */
+#define SHT_RELA 4     /* Relocation entries with addends */
+#define SHT_REL 9      /* Relocation entries, no addends */
+
+/* ARM relocation types */
+#define R_ARM_NONE 0        /* No reloc */
+#define R_ARM_PC24 1        /* Deprecated ARM instruction */
+#define R_ARM_ABS32 2       /* Direct 32 bit */
+#define R_ARM_REL32 3       /* PC relative 32 bit */
+#define R_ARM_PC13 4        /* Obsolete */
+#define R_ARM_ABS16 5       /* Direct 16 bit */
+#define R_ARM_ABS12 6       /* Direct 12 bit */
+#define R_ARM_THM_ABS5 7    /* Direct & 0x7C (LDR, STR) */
+#define R_ARM_ABS8 8        /* Direct 8 bit */
+#define R_ARM_SBREL32 9     /* ?? */
+#define R_ARM_THM_PC22 10   /* ARM Thumb BL */
+#define R_ARM_THM_PC8 11    /* ARM Thumb B */
+#define R_ARM_AMP_VCALL9 12 /* Obsolete */
+#define R_ARM_SWI24 13      /* Obsolete */
+#define R_ARM_THM_SWI8 14   /* Obsolete */
+#define R_ARM_XPC25 15      /* Obsolete */
+#define R_ARM_THM_XPC22 16  /* Obsolete */
+#define R_ARM_COPY 20       /* Copy symbol at runtime */
+#define R_ARM_GLOB_DAT 21   /* Create GOT entry */
+#define R_ARM_JUMP_SLOT 22  /* Create PLT entry */
+#define R_ARM_RELATIVE 23   /* Adjust by program base */
+#define R_ARM_GOTOFF 24     /* 32 bit offset to GOT */
+#define R_ARM_GOTPC 25      /* 32 bit PC relative offset to GOT */
+#define R_ARM_GOT32 26      /* 32 bit GOT entry */
+#define R_ARM_PLT32 27      /* 32 bit PLT address */
+
+/* How to extract and insert information held in the r_info field */
+#define ELF32_R_SYM(val) ((val) >> 8)
+#define ELF32_R_TYPE(val) ((val) & 0xff)
+#define ELF32_R_INFO(sym, type) (((sym) << 8) + ((type) & 0xff))
+
 #endif /* !ELF_H_ */

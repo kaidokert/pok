@@ -15,8 +15,12 @@
 #ifndef __POK_TYPES_H__
 #define __POK_TYPES_H__
 
-#if POK_ARCH == x86
+#ifdef POK_ARCH_X86
 #include <arch/x86/types.h>
+#endif
+
+#ifdef POK_ARCH_ARM
+#include <arch/arm/types.h>
 #endif
 
 #define NULL 0
