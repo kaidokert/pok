@@ -176,6 +176,11 @@ pok_ret_t pok_lockobj_eventwait(pok_lockobj_t *obj, uint64_t timeout) {
    */
   bool_t was_locked = (obj->current_value == 0);
 
+#ifdef POK_NEEDS_DEBUG
+  printf("EVENT_WAIT: thr=%d was_locked=%d\n", POK_SCHED_CURRENT_THREAD,
+         was_locked);
+#endif
+
   if (was_locked) {
     if (pok_lockobj_unlock(obj, NULL)) {
       SPIN_UNLOCK(obj->eventspin);
@@ -191,6 +196,10 @@ pok_ret_t pok_lockobj_eventwait(pok_lockobj_t *obj, uint64_t timeout) {
 #else
   pok_lockobj_enqueue(&obj->event_fifo, POK_SCHED_CURRENT_THREAD,
                       POK_QUEUEING_DISCIPLINE_PRIORITY);
+#endif
+
+#ifdef POK_NEEDS_DEBUG
+  printf("EVENT_WAIT: thr=%d enqueued, locking\n", POK_SCHED_CURRENT_THREAD);
 #endif
   uint64_t deadline = timeout ? timeout + POK_GETTICK() : 0;
 
@@ -229,10 +238,16 @@ pok_ret_t pok_lockobj_eventsignal(pok_lockobj_t *obj) {
   uint32_t tmp;
 
   if (pok_lockobj_fifo_is_empty(&obj->event_fifo)) {
+#ifdef POK_NEEDS_DEBUG
+    printf("EVENT_SIGNAL: fifo empty, no waiters\n");
+#endif
     SPIN_UNLOCK(obj->eventspin);
     return POK_ERRNO_NOTFOUND;
   } else {
     tmp = pok_lockobj_get_head(&obj->event_fifo);
+#ifdef POK_NEEDS_DEBUG
+    printf("EVENT_SIGNAL: waking thr=%d\n", tmp);
+#endif
     pok_sched_unlock_thread(tmp);
     pok_lockobj_dequeue(&obj->event_fifo);
     SPIN_UNLOCK(obj->eventspin);
@@ -425,7 +440,13 @@ pok_ret_t pok_lockobj_partition_wrapper(const pok_lockobj_id_t id,
   }
 
   case LOCKOBJ_OPERATION_SIGNAL: {
+#ifdef POK_NEEDS_DEBUG
+    printf("SIGNAL_SYSCALL: thr=%d id=%d\n", POK_SCHED_CURRENT_THREAD, id);
+#endif
     ret = pok_lockobj_eventsignal(&pok_partitions_lockobjs[id]);
+#ifdef POK_NEEDS_DEBUG
+    printf("SIGNAL_SYSCALL: ret=%d\n", ret);
+#endif
     return ret;
   }
 

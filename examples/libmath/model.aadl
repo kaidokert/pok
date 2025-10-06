@@ -35,15 +35,14 @@ properties
 end compute_spg;
 
 processor ppc
-properties
-   POK::Architecture => x86;
-   POK::BSP => x86_qemu;
 end ppc;
 
 processor implementation ppc.impl
 subcomponents
    partition: virtual processor mypartition.impl;
 properties
+   POK::Architecture => x86;
+   POK::BSP => x86_qemu;
    POK::Major_Frame => 1000ms;
    POK::Scheduler => static;
    POK::Slots => (1000ms);
@@ -58,13 +57,13 @@ properties
 end mythread;
 
 thread implementation mythread.impl
-calls 
+calls
    call1 : { pspg : subprogram compute_spg;};
 end mythread.impl;
 
 process partition_process
 properties
-   POK::Needed_Memory_Size => 120 Kbyte;
+   POK::Needed_Memory_Size => 32 Kbyte;
 end partition_process;
 
 process implementation partition_process.impl
@@ -80,7 +79,7 @@ subcomponents
    cpu : processor ppc.impl;
    pr1 : process partition_process.impl;
 properties
-   actual_processor_binding => 
+   actual_processor_binding =>
       (reference (cpu.partition)) applies to pr1;
 end node.impl;
 

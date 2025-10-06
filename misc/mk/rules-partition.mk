@@ -25,7 +25,7 @@ endif
 libpok: $(TARGET_LIBPOK)
 
 $(TARGET_LIBPOK): $(DEPLOYMENT_HEADER)
-	$(CD) $(POK_PATH)/libpok && $(MAKE) all
+	$(CD) $(POK_PATH)/libpok && $(MAKE) all DEPLOYMENT_HEADER=$(DEPLOYMENT_HEADER)
 	$(ECHO) $(ECHO_FLAGS) $(ECHO_FLAGS_ONELINE) "[AR] libpart.a "
 	$(AR) -x $(TARGET_LIBPOK)
 	$(AR) -csr $(TARGET_LIBPOK) *.lo
@@ -35,11 +35,11 @@ $(TARGET_LIBPOK): $(DEPLOYMENT_HEADER)
 $(TARGET): $(OBJS) $(TARGET_LIBPOK)
 	$(ECHO) $(ECHO_FLAGS) $(ECHO_FLAGS_ONELINE) "[Assemble partition $@ "
 	@if echo "$(TARGET)" | grep -q "pr1\.elf\|part1\.elf"; then \
-		$(LD) $(LDFLAGS) -T $(POK_PATH)/misc/ldscripts/$(ARCH)/$(BSP)/partition.lds $+ -o $@ -L$(dir $(TARGET_LIBPOK)) -lpok -lgcc -Wl,--defsym,__PARTITION_BASE_ADDR=0x20010000 -Wl,-Map,$@.map; \
+		$(LD) $(LDFLAGS) $(LDFLAGS_GC) -T $(POK_PATH)/misc/ldscripts/$(ARCH)/$(BSP)/partition.lds $+ -o $@ -L$(dir $(TARGET_LIBPOK)) -lpok -lgcc -Wl,--defsym,__PARTITION_BASE_ADDR=0x20010000 -Wl,-Map,$@.map; \
 	elif echo "$(TARGET)" | grep -q "pr2\.elf\|part2\.elf"; then \
-		$(LD) $(LDFLAGS) -T $(POK_PATH)/misc/ldscripts/$(ARCH)/$(BSP)/partition.lds $+ -o $@ -L$(dir $(TARGET_LIBPOK)) -lpok -lgcc -Wl,--defsym,__PARTITION_BASE_ADDR=0x20014000 -Wl,-Map,$@.map; \
+		$(LD) $(LDFLAGS) $(LDFLAGS_GC) -T $(POK_PATH)/misc/ldscripts/$(ARCH)/$(BSP)/partition.lds $+ -o $@ -L$(dir $(TARGET_LIBPOK)) -lpok -lgcc -Wl,--defsym,__PARTITION_BASE_ADDR=0x20030000 -Wl,-Map,$@.map; \
 	else \
-		$(LD) $(LDFLAGS) -T $(POK_PATH)/misc/ldscripts/$(ARCH)/$(BSP)/partition.lds $+ -o $@ -L$(dir $(TARGET_LIBPOK)) -lpok -lgcc -Wl,-Map,$@.map; \
+		$(LD) $(LDFLAGS) $(LDFLAGS_GC) -T $(POK_PATH)/misc/ldscripts/$(ARCH)/$(BSP)/partition.lds $+ -o $@ -L$(dir $(TARGET_LIBPOK)) -lpok -lgcc -Wl,-Map,$@.map; \
 	fi
 	if test $$? -eq 0; then $(ECHO) $(ECHO_FLAGS) $(ECHO_GREEN) " OK "; else $(ECHO) $(ECHO_FLAGS) $(ECHO_RED) " KO"; fi
 	@if command -v $(STRIP) >/dev/null 2>&1; then \

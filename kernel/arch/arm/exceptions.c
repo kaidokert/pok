@@ -414,6 +414,83 @@ static void __attribute__((used)) UsageFault_Handler_C(uint32_t *frame) {
     fault_puts("(invalid PC)");
   }
   fault_puts("\n");
+
+  /* Debug: Print PSP and thread stack for analysis */
+  uint32_t psp_val;
+  __asm volatile("mrs %0, psp" : "=r"(psp_val));
+  fault_puts("PSP=");
+  fault_put_hex(psp_val);
+  fault_puts("\n");
+
+  /* Print PSP stack contents */
+  fault_puts("PSP Stack: ");
+  for (int i = 0; i < 8; i++) {
+    if ((psp_val + i * 4) >= 0x20000000 && (psp_val + i * 4) < 0x20020000) {
+      fault_put_hex(*(uint32_t *)(psp_val + i * 4));
+      fault_puts(" ");
+    }
+  }
+  fault_puts("\n");
+
+  /* Print thread 1 SP and context frame */
+  extern pok_thread_t pok_threads[];
+  fault_puts("Thread1 SP=");
+  fault_put_hex(pok_threads[1].sp);
+  uint32_t t1_sp = pok_threads[1].sp;
+  fault_puts("\nThread1 SW frame [r4-r11] at ");
+  fault_put_hex(t1_sp - 32);
+  fault_puts(": ");
+  for (int i = 0; i < 8; i++) {
+    uint32_t addr = (t1_sp - 32) + i * 4;
+    if (addr >= 0x20000000 && addr < 0x20020000) {
+      fault_put_hex(*(uint32_t *)addr);
+      fault_puts(" ");
+    }
+  }
+  fault_puts("\nThread1 HW frame [r0-xpsr] at ");
+  fault_put_hex(t1_sp);
+  fault_puts(": ");
+  for (int i = 0; i < 8; i++) {
+    uint32_t addr = t1_sp + i * 4;
+    if (addr >= 0x20000000 && addr < 0x20020000) {
+      fault_put_hex(*(uint32_t *)addr);
+      fault_puts(" ");
+    }
+  }
+  fault_puts("\n");
+
+  /* Print thread 2 SP and stack */
+  fault_puts("Thread2 SP=");
+  fault_put_hex(pok_threads[2].sp);
+  fault_puts(" Stack: ");
+  uint32_t t2_sp = pok_threads[2].sp;
+  for (int i = -8; i < 8; i++) {
+    uint32_t addr = t2_sp + i * 4;
+    if (addr >= 0x20000000 && addr < 0x20020000) {
+      if (i == 0)
+        fault_puts("[");
+      fault_put_hex(*(uint32_t *)addr);
+      if (i == 0)
+        fault_puts("]");
+      fault_puts(" ");
+    }
+  }
+  fault_puts("\n");
+
+  /* Print PendSV debug values */
+  extern volatile uint32_t g_debug_loaded_sp;
+  extern volatile uint32_t g_debug_final_psp;
+  extern volatile uint32_t g_debug_saved_from_msp;
+  extern volatile uint32_t g_debug_sw_frame_addr;
+  fault_puts("PendSV: loaded_sp=");
+  fault_put_hex(g_debug_loaded_sp);
+  fault_puts(" final_psp=");
+  fault_put_hex(g_debug_final_psp);
+  fault_puts(" saved_from_msp=");
+  fault_put_hex(g_debug_saved_from_msp);
+  fault_puts(" sw_frame=");
+  fault_put_hex(g_debug_sw_frame_addr);
+  fault_puts("\n");
 #endif
 
   /* DESIGN DECISION: Hard-halt on usage faults (see MemManage handler for

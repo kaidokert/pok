@@ -97,6 +97,20 @@ uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
   /* Initial PSP points to start of hardware frame (r0) */
   uint32_t initial_psp = (uint32_t)(uintptr_t)&sp->ctx.r0;
 
+#ifdef POK_NEEDS_DEBUG
+  /* Debug: Verify frame initialization */
+  uint32_t *sw_frame = (uint32_t *)((uint32_t)initial_psp - 32);
+  uint32_t *hw_frame = (uint32_t *)initial_psp;
+  printf("FRAME_INIT: sp_struct=0x%x initial_psp=0x%x\n", (uint32_t)sp,
+         initial_psp);
+  printf("FRAME_INIT: sw_frame=0x%x [r4-r11]: %x %x %x %x %x %x %x %x\n",
+         (uint32_t)sw_frame, sw_frame[0], sw_frame[1], sw_frame[2], sw_frame[3],
+         sw_frame[4], sw_frame[5], sw_frame[6], sw_frame[7]);
+  printf("FRAME_INIT: hw_frame=0x%x [r0-xpsr]: %x %x %x %x %x %x %x %x\n",
+         (uint32_t)hw_frame, hw_frame[0], hw_frame[1], hw_frame[2], hw_frame[3],
+         hw_frame[4], hw_frame[5], hw_frame[6], hw_frame[7]);
+#endif
+
   /* Bounds: ensure software frame [r4-r11] and hardware frame [r0..xpsr] fit */
   uint32_t stack_base = (uint32_t)(uintptr_t)stack_addr;
 
@@ -140,15 +154,52 @@ uint32_t pok_context_create(uint32_t thread_id, uint32_t stack_size,
   sp->entry = entry;
   sp->id = thread_id;
 
-  /* Return the initial PSP value pointing to the hardware frame
-   * This value will be stored in pok_threads[].sp and used by context switcher
+  /* CRITICAL FIX: Return SW frame base pointer, not HW frame pointer
+   * TCB must store pointer to where r4-r11 are saved (SW frame base).
+   * PendSV will restore r4-r11 from this address, then set PSP to (this + 32)
+   * for hardware to restore r0-xpsr on exception return.
    */
-  return initial_psp;
+  uint32_t sw_frame_base = initial_psp - 32;
+  return sw_frame_base;
 }
 
-/* Global variables for PendSV context switching - accessed by PendSV handler */
-uint32_t *volatile g_old_sp_ptr = NULL;
-volatile uint32_t g_new_sp = 0;
+/* Global variables for PendSV context switching - accessed by PendSV handler
+ *
+ * IDEMPOTENT RESCHEDULE PATTERN:
+ * Instead of ephemeral parameters that get overwritten before PendSV runs,
+ * we use an idempotent scheduling flag with stable storage.
+ * PendSV reads these values when it executes (via tail-chaining after SVC).
+ * Multiple reschedule requests update the values - "last write wins".
+ * This follows the standard M-profile RTOS pattern.
+ */
+volatile uint8_t g_reschedule_needed = 0;
+volatile uint32_t *g_current_sp_ptr =
+    NULL; /* Pointer to current thread's SP field in TCB */
+volatile uint32_t g_next_sp_value =
+    0; /* SP value to load for next thread (stable storage) */
+
+/* Debug variables to track PendSV operations */
+volatile uint32_t g_debug_loaded_sp =
+    0; /* SP value loaded from g_next_sp_value */
+volatile uint32_t g_debug_final_psp = 0; /* Final PSP value after ldmia */
+volatile uint32_t g_debug_saved_from_msp =
+    0; /* PSP value when saving from MSP mode */
+volatile uint32_t g_debug_sw_frame_addr =
+    0; /* Software frame address before restore */
+volatile uint32_t g_debug_pendsv_psp =
+    0; /* PSP value before EXC_RETURN decision */
+volatile uint8_t g_debug_pendsv_path = 0; /* 0=kernel, 1=partition path */
+volatile uint32_t g_debug_pendsv_lr = 0;  /* EXC_RETURN value loaded into LR */
+volatile uint8_t g_debug_restore_marker =
+    0; /* Marker to show restore path was entered */
+volatile uint32_t g_debug_next_sp_addr = 0; /* Address of g_next_sp_value */
+volatile uint32_t g_debug_next_sp_val =
+    0; /* Value loaded from g_next_sp_value */
+volatile uint8_t g_debug_pendsv_entry =
+    0; /* Marker to show PendSV was entered */
+volatile uint32_t g_debug_resched_addr = 0; /* Address of g_reschedule_needed */
+volatile uint8_t g_debug_resched_val =
+    0; /* Value of g_reschedule_needed in PendSV */
 /**
  * Perform ARM Cortex-M context switch between threads
  *
@@ -160,15 +211,22 @@ volatile uint32_t g_new_sp = 0;
  * @param new_sp Stack pointer of thread to switch to
  */
 void pok_context_switch(uint32_t *old_sp, uint32_t new_sp) {
-  if (old_sp == NULL) {
-    /* Clear global variables within interrupt-disabled region to prevent races
+  /* SECURITY: Verify new_sp FIRST - it's required for any context switch
+   * Basic sanity checks to prevent malicious or corrupted stack pointers */
+  if (new_sp == 0 || (new_sp & 0x3) != 0) {
+    /* Invalid: NULL or non-word-aligned stack pointer - abort and clear state
      */
+#ifdef POK_NEEDS_DEBUG
+    pok_cons_write("CTX_SWITCH_ERR: invalid new_sp\n", 32);
+#endif
+    /* Clear global variables within interrupt-disabled region */
     uint32_t primask;
     __asm volatile("mrs %0, PRIMASK" : "=r"(primask)::"memory");
     __asm volatile("cpsid i" ::: "memory");
 
-    g_old_sp_ptr = NULL;
-    g_new_sp = 0;
+    g_reschedule_needed = 0;
+    g_current_sp_ptr = NULL;
+    g_next_sp_value = 0;
 
     /* Restore previous interrupt state */
     if ((primask & 0x1u) == 0) {
@@ -177,15 +235,8 @@ void pok_context_switch(uint32_t *old_sp, uint32_t new_sp) {
     return;
   }
 
-  /* SECURITY: Verify new_sp is a valid stack pointer value
-   * Basic sanity checks to prevent malicious or corrupted stack pointers */
-  if (new_sp == 0 || (new_sp & 0x3) != 0) {
-    /* Invalid: NULL or non-word-aligned stack pointer */
-#ifdef POK_NEEDS_DEBUG
-    /* Error: invalid stack pointer in context switch */
-#endif
-    return;
-  }
+  /* NOTE: old_sp CAN be NULL when switching from idle/kernel thread (uses MSP).
+   * This is VALID - PendSV will skip saving and just load the new thread. */
 
   /* Additional check: ensure new_sp is in reasonable memory range */
   if (new_sp < POK_SRAM_BASE || new_sp >= (POK_SRAM_BASE + POK_SRAM_SIZE)) {
@@ -200,14 +251,44 @@ void pok_context_switch(uint32_t *old_sp, uint32_t new_sp) {
   __asm volatile("mrs %0, PRIMASK" : "=r"(primask)::"memory");
   __asm volatile("cpsid i" ::: "memory");
 
-  /* Set up context switch parameters for PendSV handler */
-  g_old_sp_ptr = old_sp;
-  g_new_sp = new_sp;
+  /* IDEMPOTENT RESCHEDULE PATTERN:
+   * Set the reschedule flag and update scheduling state. The KEY insight:
+   * - g_current_sp_ptr is set ONLY on the FIRST request (when flag is 0)
+   * - g_next_sp_value is updated on EVERY request - "last write wins"
+   * - This ensures PendSV always saves to the ORIGINAL thread's SP,
+   *   not to an intermediate thread's SP from a later request
+   *
+   * When multiple switches are requested before PendSV runs:
+   * 1. First call: Sets g_current_sp_ptr = thread_A.sp, g_next_sp_value =
+   * thread_B.sp
+   * 2. Second call: Keeps g_current_sp_ptr = thread_A.sp, updates
+   * g_next_sp_value = thread_C.sp
+   * 3. PendSV: Saves thread_A context, loads thread_C context (correct!)
+   *
+   * This follows the standard M-profile RTOS pattern and eliminates the
+   * parameter corruption issue.
+   */
+  if (!g_reschedule_needed) {
+    /* First reschedule request - set current thread's SP pointer */
+    g_current_sp_ptr = old_sp;
+  }
+  /* Always update next thread's SP (last write wins) */
+  g_next_sp_value = new_sp;
+  g_reschedule_needed = 1;
 
 #ifdef POK_NEEDS_DEBUG
   pok_cons_write("CTX_SWITCH: new_sp=0x", 21);
   char hex_buf[9];
   uint32_t val = new_sp;
+  for (int i = 7; i >= 0; i--) {
+    hex_buf[i] = "0123456789ABCDEF"[val & 0xF];
+    val >>= 4;
+  }
+  hex_buf[8] = ' ';
+  pok_cons_write(hex_buf, 9);
+
+  pok_cons_write("cur_sp_ptr=0x", 13);
+  val = (uint32_t)(uintptr_t)g_current_sp_ptr;
   for (int i = 7; i >= 0; i--) {
     hex_buf[i] = "0123456789ABCDEF"[val & 0xF];
     val >>= 4;
@@ -219,15 +300,39 @@ void pok_context_switch(uint32_t *old_sp, uint32_t new_sp) {
   /* Ensure memory operations complete before triggering PendSV */
   __asm volatile("dsb" ::: "memory");
 
-  /* Trigger PendSV exception to perform context switch
-   * Use bit-specific write to avoid clearing other SCB_ICSR bits
-   */
-  *SCB_ICSR |= SCB_ICSR_PENDSVSET; /* write-1 to set PendSV pending */
+#ifdef POK_NEEDS_DEBUG
+  /* DEBUG: Check SCB_ICSR before triggering PendSV */
+  pok_cons_write("TRIGGER_PSV: ICSR_before=0x", 27);
+  uint32_t icsr_before = *SCB_ICSR;
+  for (int i = 7; i >= 0; i--) {
+    hex_buf[i] = "0123456789ABCDEF"[(icsr_before >> (i * 4)) & 0xF];
+  }
+  hex_buf[8] = '\n';
+  pok_cons_write(hex_buf, 9);
+#endif
+
+  /* Trigger PendSV exception to perform context switch */
+  *SCB_ICSR |= SCB_ICSR_PENDSVSET;
 
   /* Memory barrier to ensure PendSV is triggered */
   __asm volatile("dsb; isb" ::: "memory");
 
-  /* Restore previous interrupt state */
+#ifdef POK_NEEDS_DEBUG
+  /* DEBUG: Check SCB_ICSR after triggering PendSV */
+  pok_cons_write("  ICSR_after=0x", 14);
+  uint32_t icsr_after = *SCB_ICSR;
+  for (int i = 7; i >= 0; i--) {
+    hex_buf[i] = "0123456789ABCDEF"[(icsr_after >> (i * 4)) & 0xF];
+  }
+  hex_buf[8] = '\n';
+  pok_cons_write(hex_buf, 9);
+#endif
+
+  /* Enable interrupts to allow PendSV to run.
+   * PendSV will tail-chain directly from SVC exit if we're in a syscall
+   * handler. No "thread-mode gap" exists - the hardware handles this
+   * atomically.
+   */
   if ((primask & 0x1u) == 0) {
     __asm volatile("cpsie i" ::: "memory");
   }

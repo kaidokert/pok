@@ -20,6 +20,9 @@
 #include <core/syscall.h>
 #include <errno.h>
 #include <types.h>
+#ifdef POK_NEEDS_DEBUG
+#include <libc/stdio.h>
+#endif
 
 pok_ret_t pok_event_signal(pok_event_id_t id) {
   pok_lockobj_lockattr_t lockattr;

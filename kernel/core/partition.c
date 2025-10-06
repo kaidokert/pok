@@ -139,6 +139,8 @@ void pok_partition_setup_main_thread(const uint8_t pid) {
 #ifdef POK_NEEDS_DEBUG
   printf("Created main thread %d for partition %d (ret=%d)\n", main_thread, pid,
          ret);
+#else
+  (void)ret; /* Suppress unused variable warning when debug is disabled */
 #endif
   pok_partitions[pid].thread_main = main_thread;
 }
@@ -210,14 +212,14 @@ pok_ret_t pok_partition_init() {
 #ifdef POK_ARCH_ARM
     /* For W^X security, only create MPU data region for the data portion
      * Code region will be created separately with RX permissions
-     * Data region: base + 8KB, size 8KB (covers .data, .bss, stack)
+     * Data region: base + code_size, size data_size (covers .data, .bss, stack)
      *
      * IMPORTANT: We pass the data region address to pok_create_space, which
      * will set spaces[].phys_base to the data region address. This is incorrect
      * for code region validation, so we manually fix it after.
      */
-    uint32_t data_region_addr = base_addr + 0x2000; /* base + 8KB */
-    uint32_t data_region_size = 0x2000;             /* 8KB for data/stack */
+    uint32_t data_region_addr = base_addr + POK_PARTITION_DATA_OFFSET;
+    uint32_t data_region_size = POK_PARTITION_DATA_SIZE;
     pok_create_space(i, data_region_addr, data_region_size);
 
     /* Fix phys_base to point to actual partition base for code region
@@ -298,6 +300,10 @@ pok_ret_t pok_partition_init() {
     pok_partitions[i].error_status.error_kind = POK_ERROR_KIND_INVALID;
     pok_partitions[i].error_status.msg_size = 0;
 
+#ifdef POK_NEEDS_DEBUG
+    printf("About to call pok_loader_load_partition for partition %d\n", i);
+#endif
+
 #ifdef POK_ARCH_ARM
     /* ARM: Partitions are linked at absolute addresses (0x20010000,
      * 0x20014000), not at 0. No offset needed since ELF already contains
@@ -315,16 +321,16 @@ pok_ret_t pok_partition_init() {
 #ifdef POK_ARCH_ARM
     /* W^X Security: Create separate code (RX) and data (RW) regions
      * The partition linker script separates:
-     *   - Code region: .text and .rodata at base address (8KB, RX)
-     *   - Data region: .data, .bss, stack at base + 8KB (8KB, RW)
+     *   - Code region: .text and .rodata at base address (RX)
+     *   - Data region: .data, .bss, stack at base + code_size (RW)
      *
-     * Code region covers first 8KB (0x2000 bytes) of partition
-     * Data region has 8KB for .data, .bss, and thread stacks
+     * Code region covers first part of partition for .text and .rodata
+     * Data region covers second part for .data, .bss, and thread stacks
      * This enforces W^X: code is executable but not writable,
      * data/stack is writable but not executable.
      */
     uint32_t code_addr = base_vaddr;
-    uint32_t code_size = 0x2000; /* 8KB for code (.text + .rodata) */
+    uint32_t code_size = POK_PARTITION_CODE_SIZE;
 
     pok_ret_t result = pok_create_code_region(i, code_addr, code_size);
     if (result != POK_ERRNO_OK) {

@@ -32,6 +32,10 @@
 #define CORTEX_M_SOFTWARE_FRAME_SIZE                                           \
   32 /* Size of r4-r11 saved by software (8 * 4 bytes) */
 
+/* Memory layout: Partition stacks use lower RAM, kernel/idle use upper RAM
+ * This threshold separates them for determining EXC_RETURN mode in PendSV */
+#define KERNEL_STACK_THRESHOLD 0x20018000u
+
 /* No forward declarations needed - using common pok_core_syscall() */
 
 /* Architecture-specific headers */
@@ -41,6 +45,10 @@
 
 /* External variables */
 extern uint8_t pok_current_partition;
+
+/* Constant for inline assembly access - marked 'used' for assembly reference */
+static const uint32_t __attribute__((used)) kernel_stack_threshold =
+    KERNEL_STACK_THRESHOLD;
 
 /* Forward declarations */
 /* static uint8_t pok_get_current_partition_id(void); - UNUSED */
@@ -127,6 +135,30 @@ static uint8_t pok_get_current_partition_id(void) {
 }
 #endif
 
+/* Debug function to check thread 1 frame before restore */
+void __attribute__((used)) debug_check_thread1_frame(uint32_t sp_value) {
+#ifdef POK_NEEDS_DEBUG
+  printf("\n=== PENDSV: About to restore thread 1 ===\n");
+  printf("SP value from TCB: 0x%x\n", sp_value);
+  printf("SW frame addr (SP-32): 0x%x\n", sp_value - 32);
+
+  volatile uint32_t *sw_frame = (volatile uint32_t *)(sp_value - 32);
+  volatile uint32_t *hw_frame = (volatile uint32_t *)sp_value;
+
+  printf("SW frame [r4-r11]:");
+  for (int i = 0; i < 8; i++) {
+    printf(" %x", sw_frame[i]);
+  }
+  printf("\nHW frame [r0-xpsr]:");
+  for (int i = 0; i < 8; i++) {
+    printf(" %x", hw_frame[i]);
+  }
+  printf("\n");
+  printf("Expected PC: 0x200100F5, Actual PC: 0x%x\n", hw_frame[6]);
+  printf("=====================================\n");
+#endif
+}
+
 /*
  * SVC Handler implementation - called by naked wrapper
  */
@@ -146,6 +178,10 @@ static void __attribute__((used)) svc_handler_impl(uint32_t *frame) {
 
   /* Get syscall arguments from registers */
   syscall_id = (pok_syscall_id_t)frame[0]; /* r0 */
+
+#ifdef POK_NEEDS_DEBUG
+  printf("SVC: id=%d thr=%d\n", syscall_id, POK_SCHED_CURRENT_THREAD);
+#endif
 
   /* Populate syscall info structure like x86 does */
   syscall_info.partition = POK_SCHED_CURRENT_PARTITION;
@@ -201,66 +237,157 @@ void __attribute__((naked, no_instrument_function)) SVC_Handler(void) {
  * All floating point operations are handled by software libraries
  */
 void __attribute__((naked, no_instrument_function)) PendSV_Handler(void) {
-  extern uint32_t *g_old_sp_ptr;
-  extern uint32_t g_new_sp;
+  extern uint8_t g_reschedule_needed;
+  extern uint32_t *g_current_sp_ptr;
+  extern uint32_t g_next_sp_value;
 
   /* Mark variables as used to suppress warnings (they're used in asm) */
-  (void)g_old_sp_ptr;
-  (void)g_new_sp;
+  (void)g_reschedule_needed;
+  (void)g_current_sp_ptr;
+  (void)g_next_sp_value;
 
   __asm volatile(
-      /* Check if we are returning to thread mode using PSP. If not, we came
-         from MSP (kernel) and should not save context */
-      "tst lr, #4                 \n" /* Test EXC_RETURN[2] for stack pointer */
-      "beq 1f                     \n" /* If from MSP, skip saving context */
+      /* DEBUG: Store PendSV entry marker */
+      "ldr r2, =g_debug_pendsv_entry \n"
+      "movs r3, #0xBB              \n"
+      "strb r3, [r2]               \n"
 
-      /* Save context from PSP */
-      "mrs r0, psp                \n" /* Get current Process Stack Pointer */
-      "stmdb r0!, {r4-r11}        \n" /* Save r4-r11 (callee-saved regs) */
-      "ldr r1, =g_old_sp_ptr      \n" /* Load address of g_old_sp_ptr */
-      "ldr r1, [r1]               \n" /* Load g_old_sp_ptr value (the address of
-                                         sp) */
-      "cbz r1, 1f                 \n" /* Skip if NULL */
-      /* CRITICAL FIX: Store PSP pointing to hardware frame, not after software
-         regs */
-      "add r3, r0, #32            \n" /* r3 = r0 + CORTEX_M_SOFTWARE_FRAME_SIZE
-                                       */
-      "str r3, [r1]               \n" /* Store corrected PSP value into thread
-                                         struct */
+      /* IDEMPOTENT RESCHEDULE PATTERN:
+         Check if a reschedule is actually needed. If not, just return.
+         This makes PendSV safe to call multiple times. */
+      "ldr r0, =g_reschedule_needed \n" /* Load address of flag */
+
+      /* DEBUG: Store g_reschedule_needed address and value */
+      "ldr r2, =g_debug_resched_addr \n"
+      "str r0, [r2]                \n"
+
+      "ldrb r1, [r0]              \n" /* Load flag value */
+
+      /* DEBUG: Store g_reschedule_needed value */
+      "ldr r2, =g_debug_resched_val \n"
+      "strb r1, [r2]               \n"
+
+      "cbz r1, 3f                 \n" /* If not set, return immediately */
+
+      /* Context switch is needed - proceed with save/restore */
+
+      /* CRITICAL INSIGHT: Whether PendSV is called from thread mode or handler
+       * mode, the thread's r4-r11 values are ALWAYS in the CPU registers when
+       * we get here:
+       * - From thread mode (PSP): Thread was interrupted, r4-r11 not touched by
+       * hardware
+       * - From handler mode (MSP): SVC preserved r4-r11 per calling convention
+       * In BOTH cases, we need to save r4-r11 from registers to the thread's
+       * stack.
+       */
+
+      /* Check if we need to save current thread context */
+      "ldr r1, =g_current_sp_ptr  \n" /* Load address of pointer to current
+                                         thread's SP field */
+      "ldr r1, [r1]               \n" /* Load the pointer itself */
+      "cbz r1, 1f                 \n" /* Skip if NULL - no thread to save */
+
+      /* CRITICAL FIX: Always save PSP context if g_current_sp_ptr is set.
+       * Previous code checked EXC_RETURN, but when PendSV is triggered from
+       * handler mode (e.g., from SVC), EXC_RETURN doesn't reflect the thread's
+       * stack pointer type. The thread's context is ALWAYS on PSP when using
+       * PSP for user threads. The idle thread sets g_current_sp_ptr to NULL
+       * to skip saving, which is handled by the cbz check above. */
+
+      /* Get PSP - points to hardware frame pushed by exception entry */
+      "mrs r0, psp                \n"
+
+      /* DEBUG: Store PSP value for inspection */
+      "ldr r3, =g_debug_saved_from_msp \n"
+      "str r0, [r3]               \n"
+
+      /* Save thread's r4-r11 below hardware frame */
+      "stmdb r0!, {r4-r11}        \n" /* Save r4-r11, r0 now points to software
+                                         frame base */
+
+      /* DEBUG: Store the SW base we're about to write */
+      "ldr r3, =g_debug_sw_frame_addr \n"
+      "str r0, [r3]               \n"
+
+      /* CRITICAL FIX: Store SW frame base directly to TCB (no pointer
+         arithmetic!) */
+      "str r0, [r1]               \n" /* current->sp = SW frame base */
+
+      /* Memory barrier to ensure TCB write completes before continuing */
+      "dsb                        \n"
 
       "1:                         \n" /* Load new thread context */
-      "ldr r2, =g_new_sp          \n" /* r2 = &g_new_sp */
-      "ldr r0, [r2]               \n" /* r0 = g_new_sp value (points to hardware
-                                         frame) */
+
+      /* DEBUG: Store marker before loading next SP */
+      "ldr r3, =g_debug_restore_marker \n"
+      "movs r1, #0xAA              \n"
+      "strb r1, [r3]               \n"
+
+      "ldr r2, =g_next_sp_value   \n" /* r2 = &g_next_sp_value */
+
+      /* DEBUG: Store g_next_sp_value address */
+      "ldr r3, =g_debug_next_sp_addr \n"
+      "str r2, [r3]                \n"
+
+      "ldr r0, [r2]               \n" /* r0 = g_next_sp_value (SW frame base) */
+
+      /* DEBUG: Store loaded g_next_sp_value */
+      "ldr r3, =g_debug_next_sp_val \n"
+      "str r0, [r3]                \n"
+
       "cbz r0, 3f                 \n" /* Skip if NULL - no context switch */
 
-      /* CRITICAL FIX: Adjust PSP to point to software-saved registers for
-         restoration */
-      "sub r0, r0, #32            \n" /* r0 = r0 - CORTEX_M_SOFTWARE_FRAME_SIZE
-                                       */
-      "ldmia r0!, {r4-r11}        \n" /* Restore r4-r11, r0 now points to
-                                             hardware frame */
-      "msr psp, r0                \n" /* Set PSP to hardware frame for
-                                         exception return */
+      /* DEBUG: Store loaded SP value for inspection */
+      "ldr r3, =g_debug_loaded_sp \n"
+      "str r0, [r3]               \n"
 
-      /* Clear g_new_sp to prevent stale reuse */
+      /* CRITICAL FIX: Restore r4-r11 from SW frame, r0 becomes HW frame pointer
+       */
+      "ldmia r0!, {r4-r11}        \n" /* Restore r4-r11, r0 now = SW_base + 32 =
+                                         HW frame */
+
+      /* DEBUG: Store final PSP value before setting */
+      "ldr r3, =g_debug_final_psp \n"
+      "str r0, [r3]               \n"
+
+      /* Set PSP to hardware frame for exception return */
+      "msr psp, r0                \n" /* PSP = SW_base + 32 = HW frame base */
+
+      /* Clear reschedule flag to mark completion */
+      "ldr r1, =g_reschedule_needed \n"
       "movs r3, #0                \n"
-      "str r3, [r2]               \n"
+      "strb r3, [r1]              \n"
 
       /* Ensure memory ops complete before return */
       "dsb                        \n"
       "isb                        \n"
 
+      /* DEBUG: Store PSP value before decision */
+      "ldr r3, =g_debug_pendsv_psp \n"
+      "str r0, [r3]               \n"
+
       /* Check if new SP is in partition memory (RAM 0x20010000+) */
       /* Kernel threads use high RAM (0x2001F000+), partition threads use low
          RAM */
-      "ldr r1, =0x20018000        \n" /* Threshold: above this is kernel */
-      "cmp r0, r1                 \n"
+      "ldr r1, =kernel_stack_threshold \n" /* Load address of threshold constant
+                                            */
+      "ldr r1, [r1]               \n"      /* Load threshold value */
+      "cmp r0, r1                 \n"      /* Compare SP to threshold */
       "bhs 4f                     \n" /* If SP >= threshold, kernel thread */
+
+      /* DEBUG: Mark we're taking partition thread path */
+      "ldr r3, =g_debug_pendsv_path \n"
+      "movs r2, #1                \n"
+      "strb r2, [r3]              \n"
 
       /* Partition thread: Force EXC_RETURN to Thread mode using PSP
          (0xFFFFFFFD) */
       "ldr lr, =0xFFFFFFFD        \n" /* EXC_RETURN: Thread mode, use PSP */
+
+      /* DEBUG: Store EXC_RETURN value */
+      "ldr r3, =g_debug_pendsv_lr \n"
+      "str lr, [r3]               \n"
+
       "bx lr                      \n" /* Return from exception */
 
       "4:                         \n"
@@ -269,7 +396,7 @@ void __attribute__((naked, no_instrument_function)) PendSV_Handler(void) {
                                        */
 
       "3:                         \n"
-      /* No context switch - return with original LR (kernel mode) */
+      /* No context switch needed - return with original LR */
       "bx lr                      \n" /* Return from exception */
 
       :

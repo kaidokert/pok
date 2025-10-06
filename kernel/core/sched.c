@@ -556,13 +556,91 @@ void pok_sched_context_switch(const uint32_t elected_id,
     assert(!spinlocks[pok_get_proc_id()]);
 #endif
 
-    current_sp = &POK_CURRENT_THREAD.sp;
+    uint8_t old_thread_id = POK_SCHED_CURRENT_THREAD;
+    /* CRITICAL FIX: Kernel and idle threads use MSP, not PSP. Pass NULL to skip
+     * saving. */
+    current_sp =
+        (old_thread_id == IDLE_THREAD || old_thread_id == KERNEL_THREAD)
+            ? NULL
+            : &POK_CURRENT_THREAD.sp;
     new_sp = pok_threads[elected_id].sp;
+
+#ifdef POK_NEEDS_DEBUG
+    /* Log SP values to debug corruption */
+    if (elected_id == 1 || old_thread_id == 1) {
+      pok_cons_write("SCHED_CTX: old_thr=", 19);
+      char buf[16];
+      buf[0] = '0' + old_thread_id;
+      buf[1] = ' ';
+      pok_cons_write(buf, 2);
+      pok_cons_write("new_thr=", 8);
+      buf[0] = '0' + elected_id;
+      buf[1] = ' ';
+      pok_cons_write(buf, 2);
+      pok_cons_write("old_sp_ptr=0x", 13);
+      uint32_t val = (uint32_t)current_sp;
+      for (int i = 7; i >= 0; i--) {
+        buf[i] = "0123456789ABCDEF"[val & 0xF];
+        val >>= 4;
+      }
+      buf[8] = ' ';
+      pok_cons_write(buf, 9);
+      pok_cons_write("new_sp=0x", 9);
+      val = new_sp;
+      for (int i = 7; i >= 0; i--) {
+        buf[i] = "0123456789ABCDEF"[val & 0xF];
+        val >>= 4;
+      }
+      buf[8] = '\n';
+      pok_cons_write(buf, 9);
+    }
+#endif
 
     POK_SCHED_CURRENT_THREAD = elected_id;
     if (!is_source_processor)
       pok_end_ipi();
     pok_context_switch(current_sp, new_sp);
+
+#ifdef POK_NEEDS_DEBUG
+    /* Debug: Check thread SPs after context switch */
+    if (old_thread_id == 1 || elected_id == 1 || old_thread_id == 2 ||
+        elected_id == 2) {
+      char buf[16];
+      pok_cons_write("POST_CTX: thr1=0x", 17);
+      uint32_t val = pok_threads[1].sp;
+      for (int i = 7; i >= 0; i--) {
+        buf[i] = "0123456789ABCDEF"[val & 0xF];
+        val >>= 4;
+      }
+      buf[8] = ' ';
+      pok_cons_write(buf, 9);
+
+      pok_cons_write("thr2=0x", 7);
+      val = pok_threads[2].sp;
+      for (int i = 7; i >= 0; i--) {
+        buf[i] = "0123456789ABCDEF"[val & 0xF];
+        val >>= 4;
+      }
+      buf[8] = ' ';
+      pok_cons_write(buf, 9);
+
+      /* Read actual PSP to compare */
+      uint32_t psp_val;
+      __asm volatile("mrs %0, psp" : "=r"(psp_val));
+      pok_cons_write("psp=0x", 6);
+      val = psp_val;
+      for (int i = 7; i >= 0; i--) {
+        buf[i] = "0123456789ABCDEF"[val & 0xF];
+        val >>= 4;
+      }
+      buf[8] = '\n';
+      pok_cons_write(buf, 9);
+    }
+#endif
+
+    /* Note: If context switch was skipped due to pending switch,
+     * POK_SCHED_CURRENT_THREAD may not match actual running thread.
+     * This is okay - scheduler will be called again and try again. */
   }
 }
 

@@ -46,9 +46,9 @@
 #define SYSTICK_CSR_CLKSOURCE (1 << 2)
 
 /* Timer frequency from POK core (100kHz for proper timing consistency) */
-/* QEMU workaround: divide by 12 to compensate for slower instruction-based
- * timing */
-#define TIMER_RELOAD_VAL ((SYSTICK_FREQ_HZ / POK_TIMER_FREQUENCY) / 12)
+/* QEMU workaround: Multiply by 1000 to slow down timer (stays within 24-bit
+ * limit) */
+#define TIMER_RELOAD_VAL ((SYSTICK_FREQ_HZ / POK_TIMER_FREQUENCY) * 1000)
 
 /* SysTick reload register is 24-bit */
 #define SYSTICK_MAX_RELOAD 0xFFFFFF
@@ -119,15 +119,17 @@ pok_ret_t pok_timer_init(void) {
   /* Clear current value */
   SYSTICK_CVR = 0;
 
-  /* Set SysTick priority (lower than most ISRs, but above PendSV)
+  /* Set SysTick priority to lowest (same as PendSV) for proper tail-chaining
    * Using NVIC helper to ensure proper ARM_PRIORITY_BITS encoding
-   * NVIC expects 4-bit priority values (0-15), not raw 8-bit values */
-  if (pok_nvic_set_priority(EXCEPTION_SYSTICK, 12) != POK_ERRNO_OK) {
+   * NVIC expects 4-bit priority values (0-15), not raw 8-bit values
+   * CRITICAL: Must match PendSV priority (15) to allow tail-chaining */
+  if (pok_nvic_set_priority(EXCEPTION_SYSTICK, 15) != POK_ERRNO_OK) {
     return POK_ERRNO_EINVAL;
   }
   /* Clear any pending SysTick before enabling to avoid spurious tick */
   *SCB_ICSR |= SCB_ICSR_PENDSTCLR;
 
+  /* Re-enable timer with very slow rate for debugging */
   /* Configure SysTick: enable, interrupt, use processor clock */
   SYSTICK_CSR =
       SYSTICK_CSR_ENABLE | SYSTICK_CSR_TICKINT | SYSTICK_CSR_CLKSOURCE;

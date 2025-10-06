@@ -2,10 +2,11 @@ OUTPUT_FORMAT("elf32-littlearm");
 OUTPUT_ARCH("arm")
 ENTRY(Reset_Handler)
 
-/* STM32F4 memory layout */
+/* STM32F405RGT6 memory layout (NetduinoPlus2) */
+/* Note: Hardware has 192KB RAM but using 128KB until MPU config investigated */
 PHYS_BASE = 0x08000000;  /* Flash start address */
 RAM_BASE  = 0x20000000;  /* RAM start address */
-RAM_SIZE  = 0x20000;     /* 128KB RAM */
+RAM_SIZE  = 0x20000;     /* 128KB RAM (conservative for stability) */
 FLASH_SIZE = 0x100000;   /* 1MB Flash */
 
 /* Memory region definitions */

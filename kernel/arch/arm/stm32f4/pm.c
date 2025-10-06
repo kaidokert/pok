@@ -57,21 +57,29 @@ int pok_pm_init() {
 uint32_t pok_pm_sbrk(uint32_t increment) {
   uint32_t addr;
 
+/* ARM MPU requires partition base addresses to be aligned
+ * Using 4KB (0x1000) alignment for partition boundaries */
+#define PARTITION_ALIGNMENT 0x1000
+
+  /* Align current brk to partition boundary before allocation */
+  uint32_t aligned_brk =
+      (pok_arm_pm_brk + PARTITION_ALIGNMENT - 1) & ~(PARTITION_ALIGNMENT - 1);
+
 #ifdef POK_NEEDS_DEBUG
-  printf("pok_pm_sbrk: increment=0x%x, brk=0x%x, end=0x%x\n", increment,
-         pok_arm_pm_brk, pok_arm_pm_heap_end);
+  printf("pok_pm_sbrk: increment=0x%x, brk=0x%x, aligned=0x%x, end=0x%x\n",
+         increment, pok_arm_pm_brk, aligned_brk, pok_arm_pm_heap_end);
 #endif
 
-  // Check if allocation would exceed heap bounds
-  if (pok_arm_pm_brk + increment > pok_arm_pm_heap_end) {
+  // Check if allocation would exceed heap bounds (using aligned address)
+  if (aligned_brk + increment > pok_arm_pm_heap_end) {
 #ifdef POK_NEEDS_DEBUG
     printf("pok_pm_sbrk: FAILED - would exceed heap bounds\n");
 #endif
     return (0); // Return NULL for out-of-memory
   }
 
-  addr = pok_arm_pm_brk;
-  pok_arm_pm_brk += increment;
+  addr = aligned_brk;
+  pok_arm_pm_brk = aligned_brk + increment;
 
 #ifdef POK_NEEDS_DEBUG
   printf("pok_pm_sbrk: SUCCESS - allocated at 0x%x, new_brk=0x%x\n", addr,

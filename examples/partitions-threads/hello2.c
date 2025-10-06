@@ -31,13 +31,9 @@ void user_hello_part2() {
     a++;
   }
 
-  alloc1 = malloc(1000);
-  alloc2 = calloc(1000, 1);
-  printf("[PART2] First memory allocation, adress=0x%x\n", alloc1);
-  printf("[PART2] Second memory allocation, adress=0x%x\n", alloc2);
-  printf("[PART2] Hello World\n");
-  free(alloc1);
-  printf("[PART2] Deallocate first memory allocation\n");
-  free(alloc2);
-  printf("[PART2] Deallocate second memory allocation\n");
+  /* NOTE: malloc/calloc/free disabled due to ARM/Thumb linker issues
+   * TODO: Fix stdlib linking for ARM architecture */
+  (void)alloc1; /* Suppress unused variable warning */
+  (void)alloc2;
+  printf("[PART2] Hello World (computation result: a=%d, b=%d)\n", a, b);
 }

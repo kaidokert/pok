@@ -29,6 +29,17 @@
 #include <types.h>
 
 /**
+ * W^X Partition Memory Layout Constants
+ * Each partition is split into separate code (RX) and data (RW) regions
+ * Must match partition.lds linker script configuration
+ */
+#ifdef POK_ARCH_ARM
+#define POK_PARTITION_CODE_SIZE 0x4000 /* 16KB for .text and .rodata (RX) */
+#define POK_PARTITION_DATA_SIZE 0x4000 /* 16KB for .data, .bss, stacks (RW) */
+#define POK_PARTITION_DATA_OFFSET POK_PARTITION_CODE_SIZE
+#endif
+
+/**
  * \enum pok_partition_mode_t
  * \brief The different modes of a partition
  */

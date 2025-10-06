@@ -2,20 +2,23 @@ OUTPUT_FORMAT("elf32-littlearm");
 OUTPUT_ARCH("arm")
 ENTRY(__pok_partition_start)
 
-/* Memory layout for W^X security:
- * Each partition has 16KB total (0x4000 bytes)
+/* Memory layout for W^X security with dead code elimination:
+ * Each partition has 32KB total (0x8000 bytes)
  * Split into:
- *   - Code region (RX): 8KB at base address (actual code is ~5KB, padded for alignment)
- *   - Data region (RW): 8KB at base + 8KB (allows 1 thread with 8KB stack)
- * 8KB data region ensures proper MPU alignment (8KB boundary at offset 0x2000)
+ *   - Code region (RX): 16KB at base address (sufficient after dead code elimination)
+ *   - Data region (RW): 16KB at base + 16KB (for .data, .bss, thread stacks)
+ * Regions aligned to MPU requirements (16KB boundary at offset 0x4000)
+ *
+ * IMPORTANT: These sizes must match POK_PARTITION_CODE_SIZE and
+ * POK_PARTITION_DATA_SIZE defined in kernel/include/core/partition.h
  */
 
 MEMORY
 {
 	CODE (rx)  : ORIGIN = DEFINED(__PARTITION_BASE_ADDR) ? __PARTITION_BASE_ADDR : 0x0,
-	             LENGTH = 8K
-	DATA (rw)  : ORIGIN = DEFINED(__PARTITION_BASE_ADDR) ? __PARTITION_BASE_ADDR + 8K : 8K,
-	             LENGTH = 8K
+	             LENGTH = 16K  /* POK_PARTITION_CODE_SIZE */
+	DATA (rw)  : ORIGIN = DEFINED(__PARTITION_BASE_ADDR) ? __PARTITION_BASE_ADDR + 16K : 16K,
+	             LENGTH = 16K  /* POK_PARTITION_DATA_SIZE */
 }
 
 SECTIONS

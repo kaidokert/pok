@@ -34,7 +34,8 @@
  * STM32F429/439: 256KB main SRAM + 64KB CCM
  * Override POK_SRAM_SIZE in platform-specific headers if needed */
 #ifndef POK_SRAM_SIZE
-#define POK_SRAM_SIZE 0x20000 /* Default: 128KB for STM32F407/417 */
+#define POK_SRAM_SIZE                                                          \
+  0x20000 /* 128KB (conservative until 192KB MPU config resolved) */
 #endif
 
 #define POK_KERNEL_MEMORY_SIZE 0x8000     /* 32KB for kernel */

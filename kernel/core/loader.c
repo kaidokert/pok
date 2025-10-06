@@ -63,7 +63,7 @@ static pok_ret_t pok_loader_elf_load(char *file, uint32_t offset,
   if (elf_header->e_ident[0] != 0x7f || elf_header->e_ident[1] != 'E' ||
       elf_header->e_ident[2] != 'L' || elf_header->e_ident[3] != 'F') {
     pok_cons_write("LOADER: ERROR - Invalid ELF magic\n", 35);
-    pok_fatal("ELF loader received corrupted partition data");
+    POK_FATAL("ELF loader received corrupted partition data");
   }
 
   pok_cons_write("LOADER: ELF magic valid, processing entry point\n", 48);
@@ -120,7 +120,7 @@ void pok_loader_load_partition(const uint8_t part_id, uint32_t offset,
       pok_cons_write(&hex_digit, 1);
     }
     pok_cons_write("\n", 1);
-    pok_fatal("Symbol resolution problem - archive not linked to flash memory");
+    POK_FATAL("Symbol resolution problem - archive not linked to flash memory");
   }
 
   /* Now try to access the memory - this might cause a fault if MPU blocks
@@ -146,7 +146,7 @@ void pok_loader_load_partition(const uint8_t part_id, uint32_t offset,
     pok_cons_write(&hex_chars[test_byte & 0xF], 1);
     pok_cons_write("\n", 1);
     pok_cons_write("This indicates flash memory mapping issues\n", 43);
-    pok_fatal("Flash memory contains wrong data - possible mapping problem");
+    POK_FATAL("Flash memory contains wrong data - possible mapping problem");
   }
 
   size = 0;
@@ -182,12 +182,16 @@ void pok_loader_load_partition(const uint8_t part_id, uint32_t offset,
       pok_cons_write(" ", 1);
     }
     pok_cons_write("\n", 1);
-    pok_fatal("Partition ELF data corrupted or incorrectly positioned");
+    POK_FATAL("Partition ELF data corrupted or incorrectly positioned");
   }
 
   pok_cons_write("LOADER: ELF validation passed, proceeding with load\n", 52);
   uint32_t required_memory = 0;
   uint32_t partition_base = pok_partitions[part_id].base_addr;
+#ifdef POK_NEEDS_DEBUG
+  printf("LOADER: partition_base=0x%x, base_vaddr=0x%x\n", partition_base,
+         pok_partitions[part_id].base_vaddr);
+#endif
 
   if (elf_header->e_ident[0] == 0x7f && elf_header->e_ident[1] == 'E' &&
       elf_header->e_ident[2] == 'L' && elf_header->e_ident[3] == 'F') {

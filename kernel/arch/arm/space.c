@@ -725,11 +725,72 @@ uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,
   hex_buf[8] = '\n';
   pok_cons_write(hex_buf, 9);
 
+  /* Debug: Verify frame initialization */
+  pok_cons_write("SPACE_FRAME: sw[r4-r11]=", 24);
+  for (int i = 0; i < 8; i++) {
+    val = ((uint32_t *)ctx)[i];
+    for (int j = 7; j >= 0; j--) {
+      hex_buf[j] = "0123456789ABCDEF"[val & 0xF];
+      val >>= 4;
+    }
+    hex_buf[8] = ' ';
+    pok_cons_write(hex_buf, 9);
+  }
+  pok_cons_write("\n", 1);
+
+  pok_cons_write("SPACE_FRAME: hw[r0-xpsr]=", 25);
+  for (int i = 8; i < 16; i++) {
+    val = ((uint32_t *)ctx)[i];
+    for (int j = 7; j >= 0; j--) {
+      hex_buf[j] = "0123456789ABCDEF"[val & 0xF];
+      val >>= 4;
+    }
+    hex_buf[8] = ' ';
+    pok_cons_write(hex_buf, 9);
+  }
+  pok_cons_write("\n", 1);
+
   pok_cons_write("space_context_create completed\n", 33);
+
+  /* CRITICAL DEBUG: Verify memory is actually written */
+  pok_cons_write("MEM_CHECK: Reading back from memory:\n", 38);
+  volatile uint32_t *check_ptr = (volatile uint32_t *)ctx;
+  pok_cons_write("  SW frame [r4-r11]: ", 21);
+  for (int i = 0; i < 8; i++) {
+    val = check_ptr[i];
+    for (int j = 7; j >= 0; j--) {
+      hex_buf[j] = "0123456789ABCDEF"[val & 0xF];
+      val >>= 4;
+    }
+    hex_buf[8] = ' ';
+    pok_cons_write(hex_buf, 9);
+  }
+  pok_cons_write("\n  HW frame [r0-xpsr]: ", 22);
+  for (int i = 8; i < 16; i++) {
+    val = check_ptr[i];
+    for (int j = 7; j >= 0; j--) {
+      hex_buf[j] = "0123456789ABCDEF"[val & 0xF];
+      val >>= 4;
+    }
+    hex_buf[8] = ' ';
+    pok_cons_write(hex_buf, 9);
+  }
+  pok_cons_write("\n", 1);
+  pok_cons_write("CRITICAL: Returning SW frame base at 0x", 40);
+  val = (uint32_t)ctx;
+  for (int i = 7; i >= 0; i--) {
+    hex_buf[i] = "0123456789ABCDEF"[val & 0xF];
+    val >>= 4;
+  }
+  hex_buf[8] = '\n';
+  pok_cons_write(hex_buf, 9);
 #endif
 
-  /* If the scheduler stores PSP directly, return the hardware frame base. */
-  return (uint32_t)&ctx->r0;
+  /* CRITICAL FIX: Return SW frame base (r4-r11), NOT HW frame base.
+   * TCB must store pointer to where r4-r11 are saved.
+   * PendSV will restore r4-r11 from this address, then set PSP to (this + 32)
+   * for hardware to restore r0-xpsr on exception return. */
+  return (uint32_t)ctx; /* Return SW frame base, not &ctx->r0 */
 }
 
 pok_ret_t pok_arch_space_init(void) {
