@@ -51,7 +51,7 @@ end partition;
 
 virtual processor implementation partition.secure
 properties
-   Provided_Virtual_Bus_Class => 
+   Provided_Virtual_Bus_Class =>
                (classifier (pingpong::secure_bus));
    POK::Timeslice => 500 ms;
 end partition.secure;
@@ -76,14 +76,14 @@ end hello_part2;
 
 virtual processor implementation partition.common
 properties
-   Provided_Virtual_Bus_Class => 
+   Provided_Virtual_Bus_Class =>
                (classifier (pingpong::common_bus));
 end partition.common;
 
 processor ppc
 properties
-   POK::Architecture => x86;
-   POK::BSP => x86_qemu;
+   POK::Architecture => arm;
+   POK::BSP => stm32f4;
 end ppc;
 
 processor implementation ppc.impl
@@ -116,14 +116,14 @@ properties
 end send_ping;
 
 thread implementation send_ping.impl
-calls 
+calls
    call1 : { pspg : subprogram hello_part1;};
 connections
    parameter pspg.output -> tdataout;
 end send_ping.impl;
 
 thread implementation receive_ping.impl
-calls 
+calls
    call1 : { pspg : subprogram hello_part2;};
 connections
    parameter tdatain -> pspg.input;
@@ -131,7 +131,7 @@ end receive_ping.impl;
 
 process receive_ping_process
 features
-   pdatain : in event data port integer {Allowed_Connection_Binding_Class => (classifier (pingpong::medium_bus)); 
+   pdatain : in event data port integer {Allowed_Connection_Binding_Class => (classifier (pingpong::medium_bus));
                                          Queue_Size => 2;};
 properties
    POK::Needed_Memory_Size => 150 Kbyte;
@@ -140,9 +140,9 @@ end receive_ping_process;
 process send_ping_process
 features
    pdataout : out event data port integer
-      {Overflow_Handling_Protocol => DropOldest; 
+      {Overflow_Handling_Protocol => DropOldest;
 		 Allowed_Connection_Binding_Class => (classifier (pingpong::secure_bus));
-       Queue_Size => 2; 
+       Queue_Size => 2;
        };
 properties
    POK::Needed_Memory_Size => 120 Kbyte;
@@ -152,7 +152,7 @@ process implementation receive_ping_process.impl
 subcomponents
    thr : thread receive_ping.impl;
 connections
-   port pdatain -> thr.tdatain; 
+   port pdatain -> thr.tdatain;
 end receive_ping_process.impl;
 
 process implementation send_ping_process.impl
@@ -174,9 +174,9 @@ connections
    port pr1.pdataout -> pr2.pdatain
       {Allowed_Connection_Binding_Class => (classifier (pingpong::secure_bus));};
 properties
-   actual_processor_binding => 
+   actual_processor_binding =>
       (reference (cpu.partition_secure)) applies to pr2;
-   actual_processor_binding => 
+   actual_processor_binding =>
       (reference (cpu.partition_common)) applies to pr1;
 end node.impl;
 

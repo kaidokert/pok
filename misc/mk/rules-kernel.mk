@@ -10,6 +10,7 @@ endif
 
 ifneq ($(DEPLOYMENT_HEADER),)
 COPTS += -include $(DEPLOYMENT_HEADER)
+export DEPLOYMENT_HEADER
 endif
 
 ifeq ($(TARGET_KERNEL),) # This variable should identify the path to the copied pok.lo file.

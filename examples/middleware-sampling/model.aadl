@@ -17,6 +17,7 @@ public
 
 with Data_Model;
 with POK;
+with Memory_Properties;
 
 
 data integer
@@ -51,7 +52,7 @@ end partition;
 
 virtual processor implementation partition.secure
 properties
-   Provided_Virtual_Bus_Class => 
+   Provided_Virtual_Bus_Class =>
                (classifier (pingpong::secure_bus));
 end partition.secure;
 
@@ -75,14 +76,48 @@ end hello_part2;
 
 virtual processor implementation partition.common
 properties
-   Provided_Virtual_Bus_Class => 
+   Provided_Virtual_Bus_Class =>
                (classifier (pingpong::common_bus));
 end partition.common;
 
+-- Memory components for ARM MPU with explicit base addresses
+memory partition1_memory
+properties
+   Memory_Properties::Base_Address => 536903680;  -- 0x20008000 (32KB aligned)
+end partition1_memory;
+
+memory implementation partition1_memory.impl
+properties
+   Memory_Properties::Base_Address => 536903680;  -- 0x20008000 (32KB aligned)
+end partition1_memory.impl;
+
+memory partition2_memory
+properties
+   Memory_Properties::Base_Address => 536936448;  -- 0x20010000 (32KB after partition1)
+end partition2_memory;
+
+memory implementation partition2_memory.impl
+properties
+   Memory_Properties::Base_Address => 536936448;  -- 0x20010000 (32KB after partition1)
+end partition2_memory.impl;
+
+memory main_memory
+end main_memory;
+
+memory implementation main_memory.impl
+subcomponents
+   part1mem: memory partition1_memory.impl {
+      Memory_Properties::Base_Address => 536903680;
+   };
+   part2mem: memory partition2_memory.impl {
+      Memory_Properties::Base_Address => 536936448;
+   };
+end main_memory.impl;
+
 processor ppc
 properties
-   POK::Architecture => x86;
-   POK::BSP => x86_qemu;
+   POK::Architecture => arm;
+   POK::BSP => stm32f4;
 end ppc;
 
 processor implementation ppc.impl
@@ -101,7 +136,7 @@ features
    datain : in data port integer {POK::Refresh_Time => 10 ms;};
 properties
    Dispatch_Protocol => Periodic;
-   Recover_Execution_Time => 10 ms .. 20 ms;
+   Compute_Execution_Time => 10 ms .. 20 ms;
    Period => 200 Ms;
 end receive_ping;
 
@@ -111,18 +146,18 @@ features
 properties
    Dispatch_Protocol => Periodic;
    Period => 1000 Ms;
-   Recover_Execution_Time => 10 ms .. 20 ms;
+   Compute_Execution_Time => 10 ms .. 20 ms;
 end send_ping;
 
 thread implementation send_ping.impl
-calls 
+calls
    call1 : { pspg : subprogram hello_part1;};
 connections
    parameter pspg.output -> dataout;
 end send_ping.impl;
 
 thread implementation receive_ping.impl
-calls 
+calls
    call1 : { pspg : subprogram hello_part2;};
 connections
    parameter datain -> pspg.input;
@@ -133,7 +168,7 @@ features
    pdatain : in data port integer {POK::Refresh_Time => 25 ms;};
 properties
    Time_Slot => ( 2 );
-   POK::Needed_Memory_Size =>  120 Kbyte;
+   POK::Needed_Memory_Size =>  32 Kbyte;
 end receive_ping_process;
 
 process send_ping_process
@@ -141,15 +176,15 @@ features
    pdataout : out data port integer
        {POK::Refresh_Time => 15 ms;};
 properties
-   POK::Needed_Memory_Size => 120 Kbyte;
+   POK::Needed_Memory_Size => 32 Kbyte;
 end send_ping_process;
 
 process implementation receive_ping_process.impl
 subcomponents
    thr : thread receive_ping.impl;
 connections
-   port pdatain -> thr.datain; 
--- Specify the middleware 
+   port pdatain -> thr.datain;
+-- Specify the middleware
 end receive_ping_process.impl;
 
 process implementation send_ping_process.impl
@@ -164,16 +199,21 @@ end node;
 
 system implementation node.impl
 subcomponents
+   mem : memory main_memory.impl;
    cpu : processor ppc.impl;
    pr1 : process send_ping_process.impl;
    pr2 : process receive_ping_process.impl;
 connections
    port pr1.pdataout -> pr2.pdatain;
 properties
-   actual_processor_binding => 
+   actual_processor_binding =>
       (reference (cpu.partition_secure)) applies to pr2;
-   actual_processor_binding => 
+   actual_processor_binding =>
       (reference (cpu.partition_common)) applies to pr1;
+   Actual_Memory_Binding =>
+      (reference (mem.part1mem)) applies to pr1;
+   Actual_Memory_Binding =>
+      (reference (mem.part2mem)) applies to pr2;
 end node.impl;
 
 end pingpong;

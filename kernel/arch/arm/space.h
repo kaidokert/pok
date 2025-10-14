@@ -38,6 +38,11 @@ pok_ret_t pok_arch_space_init(void);
 pok_ret_t pok_create_space(uint8_t partition_id, uint32_t addr, uint32_t size);
 pok_ret_t pok_create_code_region(uint8_t partition_id, uint32_t code_addr,
                                  uint32_t code_size);
+pok_ret_t pok_create_code_region_rw(uint8_t partition_id, uint32_t code_addr,
+                                    uint32_t code_size);
+pok_ret_t pok_reconfigure_code_region_rx(uint8_t partition_id,
+                                         uint32_t code_addr,
+                                         uint32_t code_size);
 pok_ret_t pok_space_switch(uint8_t old_partition_id, uint8_t new_partition_id);
 uint32_t pok_space_base_vaddr(uint32_t addr);
 uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,

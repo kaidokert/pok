@@ -482,6 +482,13 @@ static void __attribute__((used)) UsageFault_Handler_C(uint32_t *frame) {
   extern volatile uint32_t g_debug_final_psp;
   extern volatile uint32_t g_debug_saved_from_msp;
   extern volatile uint32_t g_debug_sw_frame_addr;
+  extern volatile uint32_t g_debug_ctx_pc;
+  extern volatile uint32_t g_debug_ctx_xpsr;
+  fault_puts("CTX_SAVED: pc=");
+  fault_put_hex(g_debug_ctx_pc);
+  fault_puts(" xpsr=");
+  fault_put_hex(g_debug_ctx_xpsr);
+  fault_puts("\n");
   fault_puts("PendSV: loaded_sp=");
   fault_put_hex(g_debug_loaded_sp);
   fault_puts(" final_psp=");

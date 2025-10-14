@@ -41,7 +41,7 @@ $(TARGET): assemble-partitions
 	$(OBJCOPY) --set-section-flags .archive2=alloc,load,readonly,data partitions.o
 	$(OBJCOPY) --redefine-sym _binary_partitions_bin_start=__archive2_begin --redefine-sym _binary_partitions_bin_end=__archive2_end partitions.o
 	$(ECHO) $(ECHO_FLAGS) $(ECHO_FLAGS_ONELINE) "[LD] $@"
-	$(LD) $(LDFLAGS) -T $(POK_PATH)/misc/ldscripts/$(ARCH)/$(BSP)/kernel.lds -o $@ $(KERNEL) $(OBJS) sizes.o partitions.o `$(CC) $(CFLAGS) -print-libgcc-file-name` -Wl,-Map,$@.map
+	$(LD) $(LDFLAGS) $(LDFLAGS_GC) -T $(POK_PATH)/misc/ldscripts/$(ARCH)/$(BSP)/kernel.lds -o $@ $(KERNEL) $(OBJS) sizes.o partitions.o `$(CC) $(CFLAGS) -print-libgcc-file-name` -Wl,-Map,$@.map
 	if test $$? -eq 0; then $(ECHO) $(ECHO_FLAGS) $(ECHO_GREEN) " OK "; else $(ECHO) $(ECHO_FLAGS) $(ECHO_RED) " KO"; fi
 
 plop: assemble-partitions
@@ -61,5 +61,5 @@ plop: assemble-partitions
 	$(CC) $(CONFIG_CFLAGS) -I $(POK_PATH)/kernel/include -c sizes.c -o sizes.o
 	$(OBJCOPY) --add-section .archive2=partitions.bin sizes.o
 	$(ECHO) $(ECHO_FLAGS) $(ECHO_FLAGS_ONELINE) "[LD] $@"
-	$(LD) $(LDFLAGS) -T $(POK_PATH)/misc/ldscripts/$(ARCH)/$(BSP)/kernel.lds -o pok.elf $(KERNEL) $(OBJS) sizes.o `$(CC) $(CFLAGS) -print-libgcc-file-name` -Wl,-Map,$@.map
+	$(LD) $(LDFLAGS) $(LDFLAGS_GC) -T $(POK_PATH)/misc/ldscripts/$(ARCH)/$(BSP)/kernel.lds -o pok.elf $(KERNEL) $(OBJS) sizes.o `$(CC) $(CFLAGS) -print-libgcc-file-name` -Wl,-Map,$@.map
 	if test $$? -eq 0; then $(ECHO) $(ECHO_FLAGS) $(ECHO_GREEN) " OK "; else $(ECHO) $(ECHO_FLAGS) $(ECHO_RED) " KO"; fi

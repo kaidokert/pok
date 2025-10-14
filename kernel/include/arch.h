@@ -124,7 +124,8 @@ __attribute__((noreturn)) void pok_division_by_zero_error(void);
 #endif
 
 #ifdef POK_ARCH_ARM
-/* ARM-specific includes can be added here if needed */
+/* ARM-specific includes for W^X security and space management */
+#include <arch/arm/space.h>
 #endif
 
 #endif /* !__POK_ARCH_H__ */

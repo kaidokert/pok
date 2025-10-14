@@ -41,8 +41,8 @@ processor implementation ppc.impl
 subcomponents
    partition: virtual processor mypartition.impl;
 properties
-   POK::Architecture => x86;
-   POK::BSP => x86_qemu;
+   POK::Architecture => arm;
+   POK::BSP => stm32f4;
    POK::Major_Frame => 1000ms;
    POK::Scheduler => static;
    POK::Slots => (1000ms);
@@ -53,7 +53,7 @@ thread mythread
 properties
    Dispatch_Protocol => Periodic;
    Period => 1000 Ms;
-   Recover_Execution_Time => 10 ms .. 20 ms;
+   Compute_Execution_Time => 10 ms .. 20 ms;
 end mythread;
 
 thread implementation mythread.impl

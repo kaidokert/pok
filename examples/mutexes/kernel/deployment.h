@@ -10,7 +10,9 @@
 #define POK_CONFIG_NB_THREADS 8
 #define POK_CONFIG_PARTITIONS_NLOCKOBJECTS {1, 1}
 #define POK_CONFIG_PARTITIONS_NTHREADS {3, 3}
-#define POK_CONFIG_PARTITIONS_SIZE {16384, 16384}
+#define POK_CONFIG_PARTITIONS_SIZE                                             \
+  {25600, 25600} /* 25KB each (enough for ELF BSS + alignment, leaves ~13KB    \
+                    for idle thread) */
 #define POK_CONFIG_PROCESSOR_AFFINITY {1, 1}
 #define POK_CONFIG_PROGRAM_NAME {"pr1/pr1.elf", "pr2/pr2.elf"}
 #define POK_CONFIG_SCHEDULING_MAJOR_FRAME 53000000000

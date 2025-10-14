@@ -42,4 +42,8 @@ uint8_t get_proc_partition_id(const uint8_t pid, const uint8_t proc_real_id);
 #ifdef POK_ARCH_SPARC
 #endif
 
+#ifdef POK_ARCH_ARM
+#include <arch/arm/multiprocessing.h>
+#endif
+
 #endif /* !__POK_MULTIPROCESSING_H__ */

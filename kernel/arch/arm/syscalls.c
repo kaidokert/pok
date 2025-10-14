@@ -137,6 +137,8 @@ static uint8_t pok_get_current_partition_id(void) {
 
 /* Debug function to check thread 1 frame before restore */
 void __attribute__((used)) debug_check_thread1_frame(uint32_t sp_value) {
+  (void)sp_value; /* Suppress unused warning when POK_NEEDS_DEBUG is not defined
+                   */
 #ifdef POK_NEEDS_DEBUG
   printf("\n=== PENDSV: About to restore thread 1 ===\n");
   printf("SP value from TCB: 0x%x\n", sp_value);
@@ -223,10 +225,61 @@ void __attribute__((naked, no_instrument_function)) SVC_Handler(void) {
       "push {lr}                  \n" /* Save EXC_RETURN */
       "bl svc_handler_impl        \n"
       "pop {lr}                   \n" /* Restore EXC_RETURN */
+
+      /* Memory barrier to ensure syscall writes are visible */
+      "dsb                        \n"
+      "isb                        \n"
+
+      /* Check if context switch is needed (syscall may have triggered one) */
+      "ldr r0, =g_reschedule_needed \n"
+      "ldrb r1, [r0]              \n"
+      "cbz r1, svc_no_switch      \n" /* If no switch needed, return normally */
+
+      /* Context switch needed - perform it directly in SVC handler */
+      /* This avoids PendSV and tail-chaining complexities */
+
+      /* Check if we need to save current thread */
+      "ldr r1, =g_current_sp_ptr  \n"
+      "ldr r1, [r1]               \n" /* Load pointer to current thread's SP */
+      "cbz r1, svc_load_next      \n" /* Skip save if NULL */
+
+      /* Save current thread context */
+      "mrs r0, psp                \n" /* Get PSP (points to HW frame) */
+      "stmdb r0!, {r4-r11}        \n" /* Save SW frame below HW frame */
+      "str r0, [r1]               \n" /* Store SW base to TCB */
+      "dsb                        \n" /* Ensure write completes */
+
+      "svc_load_next:             \n"
+      /* Load next thread context */
+      "ldr r2, =g_next_sp_value   \n"
+      "ldr r0, [r2]               \n" /* r0 = next thread's SW base */
+      "cbz r0, svc_no_switch      \n" /* Skip if NULL */
+
+      "ldmia r0!, {r4-r11}        \n" /* Restore SW frame, r0 now points to HW
+                                       */
+      "msr psp, r0                \n" /* Set PSP to HW frame */
+
+      /* Clear reschedule flag FIRST, then clear PendSV */
+      "ldr r1, =g_reschedule_needed \n"
+      "movs r2, #0                \n"
+      "strb r2, [r1]              \n"
+      "dsb                        \n" /* Ensure flag clear is visible */
+
+      /* Clear PendSV pending bit since we handled the switch here */
+      "ldr r1, =0xE000ED04        \n" /* SCB_ICSR address */
+      "ldr r2, =0x08000000        \n" /* PENDSVCLR bit (bit 27) */
+      "str r2, [r1]               \n"
+      "dsb                        \n" /* Ensure ICSR write completes */
+      "isb                        \n" /* Synchronize */
+
+      /* Force return to thread mode using PSP */
+      "ldr lr, =0xFFFFFFFD        \n"
+
+      "svc_no_switch:             \n"
       "bx lr                      \n" /* Return from exception */
       :
       :
-      : "r0", "memory");
+      : "r0", "r1", "r2", "memory");
 }
 
 /*
@@ -297,20 +350,11 @@ void __attribute__((naked, no_instrument_function)) PendSV_Handler(void) {
       /* Get PSP - points to hardware frame pushed by exception entry */
       "mrs r0, psp                \n"
 
-      /* DEBUG: Store PSP value for inspection */
-      "ldr r3, =g_debug_saved_from_msp \n"
-      "str r0, [r3]               \n"
-
       /* Save thread's r4-r11 below hardware frame */
       "stmdb r0!, {r4-r11}        \n" /* Save r4-r11, r0 now points to software
                                          frame base */
 
-      /* DEBUG: Store the SW base we're about to write */
-      "ldr r3, =g_debug_sw_frame_addr \n"
-      "str r0, [r3]               \n"
-
-      /* CRITICAL FIX: Store SW frame base directly to TCB (no pointer
-         arithmetic!) */
+      /* Store SW frame base directly to TCB */
       "str r0, [r1]               \n" /* current->sp = SW frame base */
 
       /* Memory barrier to ensure TCB write completes before continuing */
@@ -429,6 +473,10 @@ pok_ret_t pok_syscall_init(void) {
   if (ret != POK_ERRNO_OK) {
     return ret;
   }
+
+  /* NOTE: SVC priority left at default (high priority).
+   * Context switches during syscalls are handled directly in SVC_Handler,
+   * not via PendSV, to avoid tail-chaining complexities. */
 
   return POK_ERRNO_OK;
 }

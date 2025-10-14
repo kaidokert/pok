@@ -30,13 +30,6 @@
 #include <core/thread.h>
 #include <core/time.h>
 
-#ifdef POK_ARCH_ARM
-/* Need to declare ARM space functions for W^X security */
-extern pok_ret_t pok_create_code_region(uint8_t partition_id,
-                                        uint32_t code_addr, uint32_t code_size);
-extern pok_ret_t pok_space_set_bounds(uint8_t partition_id, uint32_t phys_base,
-                                      uint32_t size);
-#endif
 #include <dependencies.h>
 #include <errno.h>
 
@@ -126,6 +119,8 @@ void pok_partition_setup_main_thread(const uint8_t pid) {
   pok_thread_attr_t attr;
 #ifdef POK_NEEDS_DEBUG
   printf("Setting up main thread for partition %d\n", pid);
+  printf("  partition base_addr=0x%x\n", pok_partitions[pid].base_addr);
+  printf("  thread_main_entry=0x%x\n", pok_partitions[pid].thread_main_entry);
 #endif
 
   attr.entry = (uint32_t *)pok_partitions[pid].thread_main_entry;
@@ -163,6 +158,13 @@ pok_ret_t pok_partition_init() {
 #ifdef POK_CONFIG_PARTITIONS_LOADADDR
   const uint32_t program_loadaddr[POK_CONFIG_NB_PARTITIONS] =
       POK_CONFIG_PROGRAM_LOADADDR;
+#ifdef POK_NEEDS_DEBUG
+  printf("Fixed load addresses configured: ");
+  for (int j = 0; j < POK_CONFIG_NB_PARTITIONS; j++) {
+    printf("part%d=0x%x ", j, program_loadaddr[j]);
+  }
+  printf("\n");
+#endif
 #endif
 #ifdef POK_NEEDS_LOCKOBJECTS
   uint8_t lockobj_index = 0;
@@ -186,6 +188,13 @@ pok_ret_t pok_partition_init() {
 #endif
     uint32_t program_entry;
     uint32_t base_vaddr = pok_space_base_vaddr(base_addr);
+
+#ifdef POK_ARCH_ARM
+    /* Declare variables for W^X code region management */
+    uint32_t code_addr;
+    uint32_t code_size;
+    pok_ret_t result;
+#endif
 
     pok_partitions[i].base_addr = base_addr;
     pok_partitions[i].size = size;
@@ -225,6 +234,17 @@ pok_ret_t pok_partition_init() {
     /* Fix phys_base to point to actual partition base for code region
      * validation */
     pok_space_set_bounds(i, base_addr, size);
+
+    /* W^X Security: Disable MPU during ELF loading
+     * The ELF loader needs to write to both code and data regions.
+     * Rather than manage complex RW→RX transitions, we temporarily disable
+     * the MPU, load the ELF, then create proper RX code regions and re-enable.
+     */
+#ifdef POK_NEEDS_DEBUG
+    pok_cons_write("Disabling MPU for ELF load\n", 28);
+#endif
+    extern pok_ret_t pok_mpu_disable(void);
+    pok_mpu_disable();
 #else
     /* Other architectures: create space for entire partition */
     pok_create_space(i, base_addr, size);
@@ -309,6 +329,10 @@ pok_ret_t pok_partition_init() {
      * 0x20014000), not at 0. No offset needed since ELF already contains
      * correct addresses. */
     pok_loader_load_partition(i, 0, &program_entry);
+#ifdef POK_NEEDS_DEBUG
+    printf("PART_INIT: partition=%d base_addr=0x%x program_entry=0x%x\n", i,
+           base_addr, program_entry);
+#endif
 #else
     /* Other architectures: offset is difference between physical and virtual */
     pok_loader_load_partition(i, base_addr - base_vaddr, &program_entry);
@@ -319,24 +343,32 @@ pok_ret_t pok_partition_init() {
     pok_partitions[i].thread_main_entry = program_entry;
 
 #ifdef POK_ARCH_ARM
-    /* W^X Security: Create separate code (RX) and data (RW) regions
+    /* W^X Security: Create RX code region and re-enable MPU
      * The partition linker script separates:
      *   - Code region: .text and .rodata at base address (RX)
      *   - Data region: .data, .bss, stack at base + code_size (RW)
      *
-     * Code region covers first part of partition for .text and .rodata
-     * Data region covers second part for .data, .bss, and thread stacks
+     * Now that ELF is loaded, create code region with RX permissions.
+     * Data region was already created with RW+XN permissions.
      * This enforces W^X: code is executable but not writable,
      * data/stack is writable but not executable.
      */
-    uint32_t code_addr = base_vaddr;
-    uint32_t code_size = POK_PARTITION_CODE_SIZE;
+    code_addr = base_vaddr;
+    code_size = POK_PARTITION_CODE_SIZE;
 
-    pok_ret_t result = pok_create_code_region(i, code_addr, code_size);
+    extern pok_ret_t pok_create_code_region(
+        uint8_t partition_id, uint32_t code_addr, uint32_t code_size);
+    result = pok_create_code_region(i, code_addr, code_size);
     if (result != POK_ERRNO_OK) {
       pok_cons_write("ERROR: Code region creation failed\n", 36);
       return POK_ERRNO_EFAULT;
     }
+
+#ifdef POK_NEEDS_DEBUG
+    pok_cons_write("Re-enabling MPU with W^X protection\n", 37);
+#endif
+    extern pok_ret_t pok_mpu_enable(void);
+    pok_mpu_enable();
 
     pok_cons_write(
         "W^X enforced - partition has separate RX code and RW data regions\n",

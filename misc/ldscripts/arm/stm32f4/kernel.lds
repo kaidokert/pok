@@ -73,7 +73,7 @@ SECTIONS
 	.archive2 : AT(ADDR(.archive2))
 	{
 		__archive2_begin = .;
-		*(.archive2)
+		KEEP(*(.archive2))
 		. = ALIGN(4);
 		__archive2_end = .;
 	} :archive

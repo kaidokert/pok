@@ -200,6 +200,9 @@ volatile uint8_t g_debug_pendsv_entry =
 volatile uint32_t g_debug_resched_addr = 0; /* Address of g_reschedule_needed */
 volatile uint8_t g_debug_resched_val =
     0; /* Value of g_reschedule_needed in PendSV */
+volatile uint32_t g_debug_ctx_pc = 0; /* PC value from context before restore */
+volatile uint32_t g_debug_ctx_xpsr =
+    0; /* xPSR value from context before restore */
 /**
  * Perform ARM Cortex-M context switch between threads
  *

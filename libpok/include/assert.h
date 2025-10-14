@@ -28,4 +28,8 @@ void __assert_failed(const char *assertion, const char *file, unsigned int line,
 #define assert(expr) ((void)0)
 
 #endif /* POK_NEEDS_ASSERT */
+
+/* Include macros for Ocarina-generated code */
+#include <gen_assert.h>
+
 #endif /* POK_ASSERT_H */

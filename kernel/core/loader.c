@@ -200,8 +200,14 @@ void pok_loader_load_partition(const uint8_t part_id, uint32_t offset,
     for (unsigned int i = 0; i < elf_header->e_phnum; ++i) {
       if (elf_phdr[i].p_type == PT_LOAD) {
         /* Calculate size relative to partition base, not absolute address */
-        uint32_t end_offset =
-            (elf_phdr[i].p_vaddr - partition_base) + elf_phdr[i].p_memsz;
+        uint32_t vaddr_offset = elf_phdr[i].p_vaddr - partition_base;
+        uint32_t end_offset = vaddr_offset + elf_phdr[i].p_memsz;
+#ifdef POK_NEEDS_DEBUG
+        printf(
+            "LOADER: seg%u: vaddr=0x%x vaddr_offset=0x%x memsz=0x%x end=0x%x\n",
+            i, elf_phdr[i].p_vaddr, vaddr_offset, elf_phdr[i].p_memsz,
+            end_offset);
+#endif
         if (end_offset > required_memory) {
           required_memory = end_offset;
         }

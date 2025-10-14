@@ -449,6 +449,132 @@ pok_ret_t pok_create_code_region(uint8_t partition_id, uint32_t code_addr,
   return POK_ERRNO_OK;
 }
 
+/**
+ * Create code region with RW permissions (for ELF loading)
+ * Same as pok_create_code_region but with write permissions enabled temporarily
+ *
+ * @param partition_id Partition index
+ * @param code_addr Base address of the code region
+ * @param code_size Size of the code region
+ * @return POK_ERRNO_OK on success, error code on failure
+ */
+pok_ret_t pok_create_code_region_rw(uint8_t partition_id, uint32_t code_addr,
+                                    uint32_t code_size) {
+  uint32_t mpu_attributes;
+  uint8_t region_id;
+
+  if (partition_id >= POK_CONFIG_NB_PARTITIONS) {
+    return POK_ERRNO_EINVAL;
+  }
+
+  if (spaces[partition_id].size == 0) {
+    return POK_ERRNO_EINVAL;
+  }
+
+  region_id = partition_id + 1 + POK_CONFIG_NB_PARTITIONS;
+
+  uint32_t total_regions_needed = 1 + (2 * POK_CONFIG_NB_PARTITIONS);
+  uint32_t available_regions = pok_mpu_get_region_count();
+
+  if (total_regions_needed > available_regions ||
+      region_id >= available_regions) {
+    return POK_ERRNO_EINVAL;
+  }
+
+  if (code_size == 0) {
+    return POK_ERRNO_EINVAL;
+  }
+
+  uint32_t partition_base = spaces[partition_id].phys_base;
+
+  if (code_addr < partition_base) {
+    return POK_ERRNO_EINVAL;
+  }
+
+  uint32_t code_offset = code_addr - partition_base;
+  if (code_size > spaces[partition_id].size ||
+      code_offset > spaces[partition_id].size - code_size) {
+    return POK_ERRNO_EINVAL;
+  }
+
+  /* Use RW permissions for code region during ELF load */
+  mpu_attributes = MPU_ATTR_INTERNAL_SRAM | MPU_PERM_ALL_RW;
+
+  uint32_t aligned_size = mpu_align_size_to_power_of_2(code_size);
+  if (aligned_size == 0 || !mpu_is_aligned(code_addr, aligned_size)) {
+    return POK_ERRNO_EINVAL;
+  }
+
+  if (aligned_size > spaces[partition_id].size ||
+      code_offset > spaces[partition_id].size - aligned_size) {
+    return POK_ERRNO_EINVAL;
+  }
+
+  /* Configure and ENABLE MPU region with RW permissions */
+  if (pok_mpu_configure_region(region_id, code_addr, aligned_size,
+                               mpu_attributes) != POK_ERRNO_OK) {
+    return POK_ERRNO_EFAULT;
+  }
+
+  spaces[partition_id].mpu_code_region = region_id;
+  spaces[partition_id].code_base = code_addr;
+  spaces[partition_id].code_size = code_size;
+
+  /* Enable the region for ELF loading */
+  pok_mpu_enable_region(region_id);
+
+#ifdef POK_NEEDS_DEBUG
+  pok_cons_write("pok_create_code_region_rw completed (RW for ELF load)\n", 56);
+#endif
+
+  return POK_ERRNO_OK;
+}
+
+/**
+ * Reconfigure code region to RX (read-execute only) after ELF loading
+ *
+ * @param partition_id Partition index
+ * @param code_addr Base address of the code region
+ * @param code_size Size of the code region
+ * @return POK_ERRNO_OK on success, error code on failure
+ */
+pok_ret_t pok_reconfigure_code_region_rx(uint8_t partition_id,
+                                         uint32_t code_addr,
+                                         uint32_t code_size) {
+  uint32_t mpu_attributes;
+  uint8_t region_id;
+
+  if (partition_id >= POK_CONFIG_NB_PARTITIONS) {
+    return POK_ERRNO_EINVAL;
+  }
+
+  region_id = partition_id + 1 + POK_CONFIG_NB_PARTITIONS;
+
+  /* Use RO permissions for code region after ELF load */
+  mpu_attributes = MPU_ATTR_INTERNAL_SRAM | MPU_PERM_ALL_RO;
+
+  uint32_t aligned_size = mpu_align_size_to_power_of_2(code_size);
+  if (aligned_size == 0) {
+    return POK_ERRNO_EINVAL;
+  }
+
+  /* Reconfigure MPU region with RX permissions */
+  if (pok_mpu_configure_region(region_id, code_addr, aligned_size,
+                               mpu_attributes) != POK_ERRNO_OK) {
+    return POK_ERRNO_EFAULT;
+  }
+
+  /* Re-enable the region with new RX permissions */
+  pok_mpu_enable_region(region_id);
+
+#ifdef POK_NEEDS_DEBUG
+  pok_cons_write("pok_reconfigure_code_region_rx completed (RX enforced)\n",
+                 57);
+#endif
+
+  return POK_ERRNO_OK;
+}
+
 pok_ret_t pok_space_switch(uint8_t old_partition_id, uint8_t new_partition_id) {
 #ifdef POK_NEEDS_DEBUG
   pok_cons_write("pok_space_switch: old=", 23);
@@ -524,6 +650,31 @@ uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,
                                   uint32_t arg2) {
   context_t *ctx;
   uint32_t entry_abs, stack_abs;
+
+  pok_cons_write("=== CTX_CREATE: pid=", 20);
+  char buf[16];
+  buf[0] = '0' + partition_id;
+  buf[1] = ' ';
+  buf[2] = 'e';
+  buf[3] = 'n';
+  buf[4] = 't';
+  buf[5] = 'r';
+  buf[6] = 'y';
+  buf[7] = '_';
+  buf[8] = 'r';
+  buf[9] = 'e';
+  buf[10] = 'l';
+  buf[11] = '=';
+  buf[12] = '0';
+  buf[13] = 'x';
+  pok_cons_write(buf, 14);
+  uint32_t temp = entry_rel;
+  for (int i = 7; i >= 0; i--) {
+    buf[i] = "0123456789ABCDEF"[temp & 0xF];
+    temp >>= 4;
+  }
+  buf[8] = '\n';
+  pok_cons_write(buf, 9);
 
   if (partition_id >= POK_CONFIG_NB_PARTITIONS) {
     return (0);
@@ -657,19 +808,55 @@ uint32_t pok_space_context_create(uint8_t partition_id, uint32_t entry_rel,
   uint32_t base = spaces[partition_id].phys_base;
   uint32_t end = base + spaces[partition_id].size;
 
-  /* Ensure we have enough space for the context frame */
-  if (sp_aligned < base + sizeof(context_t) || sp_aligned >= end) {
+  /* CRITICAL FIX: Reserve space above context for thread's initial stack usage
+   *
+   * Problem: If we place context right at sp_aligned - 64, after exception
+   * return PSP = sp_aligned. When the thread gets interrupted, hardware pushes
+   * HW frame at PSP-32, which OVERWRITES the initial context!
+   *
+   * Solution: Place context further below to leave room for thread execution.
+   * After exception return, PSP will be at (sp_aligned - INITIAL_STACK_SPACE),
+   * giving the thread INITIAL_STACK_SPACE bytes before hitting the context.
+   */
+#define INITIAL_STACK_SPACE 128 /* Space for thread's stack before context */
+
+  /* Ensure we have enough space for context frame + initial stack space */
+  if (sp_aligned < base + sizeof(context_t) + INITIAL_STACK_SPACE ||
+      sp_aligned >= end) {
 #ifdef POK_NEEDS_DEBUG
-    pok_cons_write("ERROR: Insufficient space for context frame\n", 47);
+    pok_cons_write("ERROR: Insufficient space for context frame and stack\n",
+                   56);
 #endif
     return (0);
   }
 
-  /* Create context frame at top of user stack (no kernel stack allocation) */
-  ctx = (context_t *)(sp_aligned - sizeof(context_t));
+  /* Create context frame below the initial stack space */
+  ctx = (context_t *)(sp_aligned - sizeof(context_t) - INITIAL_STACK_SPACE);
+
+#ifdef POK_NEEDS_DEBUG
+  pok_cons_write("CTX_PLACEMENT: sp_aligned=0x", 29);
+  char dbg_buf[16];
+  uint32_t dbg_val = sp_aligned;
+  for (int i = 7; i >= 0; i--) {
+    dbg_buf[i] = "0123456789ABCDEF"[dbg_val & 0xF];
+    dbg_val >>= 4;
+  }
+  dbg_buf[8] = ' ';
+  pok_cons_write(dbg_buf, 9);
+
+  pok_cons_write("ctx=0x", 6);
+  dbg_val = (uint32_t)ctx;
+  for (int i = 7; i >= 0; i--) {
+    dbg_buf[i] = "0123456789ABCDEF"[dbg_val & 0xF];
+    dbg_val >>= 4;
+  }
+  dbg_buf[8] = '\n';
+  pok_cons_write(dbg_buf, 9);
+#endif
 
   /* Validate context frame is still within partition bounds */
-  if ((uint32_t)ctx < base || (uint32_t)ctx >= end - sizeof(context_t)) {
+  if ((uint32_t)ctx < base ||
+      (uint32_t)ctx + sizeof(context_t) + INITIAL_STACK_SPACE > end) {
 #ifdef POK_NEEDS_DEBUG
     pok_cons_write("ERROR: Context frame outside partition bounds\n", 49);
 #endif

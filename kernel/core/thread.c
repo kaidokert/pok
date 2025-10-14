@@ -23,6 +23,7 @@
 
 #include <arch.h>
 #include <assert.h>
+#include <bsp.h>
 #include <core/debug.h>
 #include <core/error.h>
 #include <core/multiprocessing.h>
@@ -66,8 +67,15 @@ void pok_thread_insert_sort(uint16_t index_low, uint16_t index_high) {
 #endif
 
 void pok_idle_thread_init() {
+#ifdef POK_NEEDS_DEBUG
+  printf("[IDLE_INIT] Starting idle thread initialization\n");
+#endif
 
   for (int i = 0; i < POK_CONFIG_NB_PROCESSORS; i++) {
+#ifdef POK_NEEDS_DEBUG
+    printf("[IDLE_INIT] Initializing idle thread %d (index %d)\n", i,
+           IDLE_THREAD - i);
+#endif
 
     pok_threads[IDLE_THREAD - i].period = INFINITE_TIME_VALUE;
     pok_threads[IDLE_THREAD - i].deadline = 0;
@@ -82,7 +90,18 @@ void pok_idle_thread_init() {
 
     pok_threads[IDLE_THREAD - i].sp = pok_context_create(
         IDLE_THREAD - i, IDLE_STACK_SIZE, (uint32_t)pok_arch_idle);
+
+#ifdef POK_NEEDS_DEBUG
+    printf("[IDLE_INIT] Idle thread %d: sp=0x%x entry=0x%x state=%d\n",
+           IDLE_THREAD - i, pok_threads[IDLE_THREAD - i].sp,
+           (uint32_t)pok_threads[IDLE_THREAD - i].entry,
+           pok_threads[IDLE_THREAD - i].state);
+#endif
   }
+
+#ifdef POK_NEEDS_DEBUG
+  printf("[IDLE_INIT] Idle thread initialization complete\n");
+#endif
 }
 
 /**
@@ -218,6 +237,9 @@ pok_ret_t pok_partition_thread_create(uint32_t *thread_id,
 
   stack_vaddr = pok_thread_stack_addr(
       partition_id, pok_partitions[partition_id].thread_index);
+#ifdef POK_NEEDS_DEBUG
+  printf("DEBUG: After pok_thread_stack_addr, stack_vaddr=0x%x\n", stack_vaddr);
+#endif
 
   pok_threads[id].state = POK_STATE_DELAYED_START;
   pok_threads[id].wakeup_time = 0;
@@ -229,7 +251,27 @@ pok_ret_t pok_partition_thread_create(uint32_t *thread_id,
   /* Convert absolute entry address to partition-relative offset
    * Clear Thumb bit (LSB) before calculating offset */
   uint32_t entry_abs = (uint32_t)attr->entry & ~1U; /* Clear Thumb bit */
-  uint32_t entry_rel = entry_abs - pok_partitions[partition_id].base_addr;
+  uint32_t part_base = pok_partitions[partition_id].base_addr;
+
+  pok_cons_write("THR_CREATE: abs=0x", 18);
+  char hex[9];
+  uint32_t temp = entry_abs;
+  for (int i = 7; i >= 0; i--) {
+    hex[i] = "0123456789ABCDEF"[temp & 0xF];
+    temp >>= 4;
+  }
+  hex[8] = ' ';
+  pok_cons_write(hex, 9);
+  pok_cons_write("base=0x", 7);
+  temp = part_base;
+  for (int i = 7; i >= 0; i--) {
+    hex[i] = "0123456789ABCDEF"[temp & 0xF];
+    temp >>= 4;
+  }
+  hex[8] = '\n';
+  pok_cons_write(hex, 9);
+
+  uint32_t entry_rel = entry_abs - part_base;
   pok_threads[id].sp = pok_space_context_create(
       partition_id, entry_rel, pok_threads[id].processor_affinity, stack_vaddr,
       0xdead, 0xbeaf);

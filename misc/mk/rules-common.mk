@@ -36,7 +36,7 @@ $(OBJ_DIR)/%.a: $(LO_DEPS)
 
 $(OBJ_DIR)/%.o: %.S
 	$(ECHO) $(ECHO_FLAGS) $(ECHO_FLAGS_ONELINE) "[CC] $< "
-	$(GREP) PROCESSORS $(DEPLOYMENT_HEADER) > tmp.h
+	$(GREP) PROCESSORS $(DEPLOYMENT_HEADER) > tmp.h || true
 	$(CC) -c $(ASFLAGS) -nostdinc -iwithprefix include -fno-builtin -DPOK_ARCH_ARM -DPOK_NEEDS_STM32F4_PERIPHERALS -O -fno-stack-protector -ffreestanding -nostdlib -I/opt/m/crazy/pok/kernel/include -I/opt/m/crazy/pok/libpok/include -I../../../..//kernel/include -include tmp.h -DASM_SOURCE=1 $< -o $@
 	$(RM) tmp.h
 	if test $$? -eq 0; then $(ECHO) $(ECHO_FLAGS) $(ECHO_GREEN) " OK "; else $(ECHO) $(ECHO_FLAGS) $(ECHO_RED) " KO"; fi

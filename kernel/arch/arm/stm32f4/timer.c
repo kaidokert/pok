@@ -46,9 +46,7 @@
 #define SYSTICK_CSR_CLKSOURCE (1 << 2)
 
 /* Timer frequency from POK core (100kHz for proper timing consistency) */
-/* QEMU workaround: Multiply by 1000 to slow down timer (stays within 24-bit
- * limit) */
-#define TIMER_RELOAD_VAL ((SYSTICK_FREQ_HZ / POK_TIMER_FREQUENCY) * 1000)
+#define TIMER_RELOAD_VAL (SYSTICK_FREQ_HZ / POK_TIMER_FREQUENCY)
 
 /* SysTick reload register is 24-bit */
 #define SYSTICK_MAX_RELOAD 0xFFFFFF

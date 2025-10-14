@@ -9,7 +9,7 @@ ENTRY(Reset_Handler)
 MEMORY
 {
   FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 1024K
-  SRAM (rwx)  : ORIGIN = 0x20000000, LENGTH = 128K
+  SRAM (rwx)  : ORIGIN = 0x20000000, LENGTH = 128K  /* STM32F405RG (Netduino Plus 2) has 128KB */
   CCMSRAM (rw) : ORIGIN = 0x10000000, LENGTH = 64K  /* Core Coupled Memory for DMA-free data */
 }
 
