@@ -24,10 +24,25 @@ extern uint8_t pok_ports_kind[POK_CONFIG_NB_PORTS];
 pok_ret_t pok_port_sampling_id(char *name, pok_port_id_t *id) {
   uint8_t i;
 
+#ifdef POK_NEEDS_DEBUG
+  printf("[PORT_LOOKUP] Looking for port '%s' (current_partition=%d)\n", name,
+         POK_SCHED_CURRENT_PARTITION);
+#endif
+
   for (i = 0; i < POK_CONFIG_NB_PORTS; i++) {
+#ifdef POK_NEEDS_DEBUG
+    printf("  [%d] name='%s' kind=%d\n", i, pok_ports_names[i],
+           pok_ports_kind[i]);
+#endif
     if ((strcmp(name, pok_ports_names[i]) == 0) &&
         (pok_ports_kind[i] == POK_PORT_KIND_SAMPLING)) {
+#ifdef POK_NEEDS_DEBUG
+      printf("  [%d] MATCHED! Checking ownership...\n", i);
+#endif
       if (!pok_own_port(POK_SCHED_CURRENT_PARTITION, i)) {
+#ifdef POK_NEEDS_DEBUG
+        printf("  [%d] OWNERSHIP FAILED\n", i);
+#endif
         return POK_ERRNO_PORT;
       }
 
@@ -36,6 +51,9 @@ pok_ret_t pok_port_sampling_id(char *name, pok_port_id_t *id) {
       return POK_ERRNO_OK;
     }
   }
+#ifdef POK_NEEDS_DEBUG
+  printf("[PORT_LOOKUP] Port '%s' NOT FOUND\n", name);
+#endif
   return POK_ERRNO_NOTFOUND;
 }
 

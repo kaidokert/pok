@@ -100,7 +100,9 @@ uint64_t pok_sched_next_flush; // variable used to handle user defined
                                // MAF and from partition slot
                                // boundaries
 
-uint8_t pok_sched_current_slot =
+/* CRITICAL: Use uint32_t instead of uint8_t to avoid corruption from adjacent
+ * writes */
+volatile uint32_t pok_sched_current_slot =
     0; /* Which slot are we executing at this time ?*/
 
 extern int spinlocks[POK_CONFIG_NB_PROCESSORS];
@@ -140,6 +142,49 @@ void pok_sched_init(void) {
   pok_sched_next_major_frame = POK_CONFIG_SCHEDULING_MAJOR_FRAME;
   pok_sched_next_deadline = pok_sched_slots[0];
   pok_sched_next_flush = 0;
+
+#ifdef POK_NEEDS_DEBUG
+  pok_cons_write("SCHED_INIT called - resetting slot to 0\n", 41);
+
+  /* DEBUG: Print ALL thread states at initialization */
+  extern pok_thread_t pok_threads[POK_CONFIG_NB_THREADS];
+
+  pok_cons_write("\n=== ALL THREADS AT BOOT ===\n", 29);
+  char buf[80];
+  for (uint8_t tid = 0; tid < POK_CONFIG_NB_THREADS; tid++) {
+    /* Skip if entry is NULL (thread not initialized) */
+    if (pok_threads[tid].entry == 0) {
+      continue;
+    }
+
+    pok_cons_write("Thread ", 7);
+    buf[0] = '0' + (tid / 10);
+    buf[1] = '0' + (tid % 10);
+    pok_cons_write(buf, 2);
+
+    pok_cons_write(": part=", 7);
+    buf[0] = '0' + pok_threads[tid].partition;
+    pok_cons_write(buf, 1);
+
+    pok_cons_write(" state=", 7);
+    buf[0] = '0' + pok_threads[tid].state;
+    pok_cons_write(buf, 1);
+
+    pok_cons_write(" priority=", 10);
+    buf[0] = '0' + pok_threads[tid].priority;
+    pok_cons_write(buf, 1);
+
+    pok_cons_write(" entry=0x", 9);
+    uint32_t entry = (uint32_t)pok_threads[tid].entry;
+    for (int i = 7; i >= 0; i--) {
+      uint8_t nibble = (entry >> (i * 4)) & 0xF;
+      buf[7 - i] = (nibble < 10) ? ('0' + nibble) : ('A' + nibble - 10);
+    }
+    pok_cons_write(buf, 8);
+    pok_cons_write("\n", 1);
+  }
+  pok_cons_write("===========================\n\n", 30);
+#endif
   pok_current_partition = pok_sched_slots_allocation[0];
 
   /* ARM: Enable initial partition's MPU regions before scheduling starts */
@@ -248,21 +293,20 @@ uint8_t pok_elect_partition() {
 #endif /* defined POK_FLUSH_PERIOD || POK_NEEDS_FLUSH_ON_WINDOWS */
 #endif /* defined (POK_NEEDS_PORTS....) */
 
-    pok_sched_current_slot =
-        (pok_sched_current_slot + 1) % POK_CONFIG_SCHEDULING_NBSLOTS;
+    /* CRITICAL: Increment slot counter */
+    uint32_t old_slot = pok_sched_current_slot;
+    uint32_t new_slot_before_mod = old_slot + 1;
+    uint32_t new_slot = new_slot_before_mod % POK_CONFIG_SCHEDULING_NBSLOTS;
+
+    pok_sched_current_slot = new_slot;
+
+    /* CRITICAL: Memory barrier to ensure slot write completes */
+    __asm volatile("dsb" ::: "memory");
+    __asm volatile("isb" ::: "memory");
+
     pok_sched_next_deadline =
         pok_sched_next_deadline + pok_sched_slots[pok_sched_current_slot];
-    /*
-        *  FIXME : current debug session about exceptions-handled
-          printf ("Switch from partition %d to partition %d\n",
-       pok_current_partition, pok_sched_current_slot); printf ("old current
-       thread = %d\n", POK_SCHED_CURRENT_THREAD);
 
-          printf ("new current thread = %d\n",
-       CURRENT_THREAD(pok_partitions[pok_sched_current_slot])); printf ("new
-       prev current thread = %d\n",
-       pok_partitions[pok_sched_current_slot].prev_thread);
-          */
     next_partition = pok_sched_slots_allocation[pok_sched_current_slot];
   }
 #endif /* POK_CONFIG_NB_PARTITIONS > 1 */
@@ -290,45 +334,8 @@ uint32_t pok_elect_thread(uint8_t new_partition_id) {
 #if defined(POK_NEEDS_LOCKOBJECTS) || defined(POK_NEEDS_PORTS_QUEUEING) ||     \
     defined(POK_NEEDS_PORTS_SAMPLING)
       if (thread->state == POK_STATE_WAITING) {
-#ifdef POK_NEEDS_DEBUG
-        static uint32_t wakeup_check_count = 0;
-        if ((wakeup_check_count % 500) == 0) {
-          int j;
-          char buf[30];
-          uint64_t wt = thread->wakeup_time;
-          pok_cons_write("WAKEUP_CHECK: wakeup=", 21);
-          /* Print wakeup_time in hex */
-          buf[0] = '0';
-          buf[1] = 'x';
-          for (j = 0; j < 8; j++) {
-            uint8_t nibble = (wt >> (28 - j * 4)) & 0xF;
-            buf[2 + j] = (nibble < 10) ? ('0' + nibble) : ('A' + nibble - 10);
-          }
-          buf[10] = ' ';
-          buf[11] = 'n';
-          buf[12] = 'o';
-          buf[13] = 'w';
-          buf[14] = '=';
-          buf[15] = '0';
-          buf[16] = 'x';
-          for (j = 0; j < 8; j++) {
-            uint8_t nibble = (now >> (28 - j * 4)) & 0xF;
-            buf[17 + j] = (nibble < 10) ? ('0' + nibble) : ('A' + nibble - 10);
-          }
-          buf[25] = '\n';
-          pok_cons_write(buf, 26);
-        }
-        wakeup_check_count++;
-#endif
         if (thread->wakeup_time <= now) {
           thread->state = POK_STATE_RUNNABLE;
-#ifdef POK_NEEDS_DEBUG
-          pok_cons_write("THREAD_WOKEN: thread=", 21);
-          char buf2[3];
-          buf2[0] = '0' + i;
-          buf2[1] = '\n';
-          pok_cons_write(buf2, 2);
-#endif
         }
       }
 #endif
@@ -351,6 +358,14 @@ uint32_t pok_elect_thread(uint8_t new_partition_id) {
   case POK_PARTITION_MODE_INIT_COLD:
   case POK_PARTITION_MODE_INIT_WARM:
     if (pok_get_proc_id() == new_partition->thread_main_proc) {
+      /* Activate main thread if it's in DELAYED_START state */
+      if (pok_threads[new_partition->thread_main].state ==
+          POK_STATE_DELAYED_START) {
+        pok_threads[new_partition->thread_main].state = POK_STATE_RUNNABLE;
+      }
+
+      /* Continue with existing logic below */
+
       if ((new_partition->thread_error != 0) &&
           (pok_threads[new_partition->thread_error].state !=
            POK_STATE_STOPPED)) {
@@ -519,32 +534,6 @@ void pok_sched_context_switch(const uint32_t elected_id,
   pok_bool_t skip_switch = (POK_SCHED_CURRENT_THREAD == elected_id) &&
                            (pok_threads[elected_id].sp != 0);
 
-#ifdef POK_NEEDS_DEBUG
-  static uint32_t ctx_call = 0;
-  if ((ctx_call % 100) == 0) {
-    pok_cons_write("pok_sched_context_switch: curr=", 32);
-    char buf[16];
-    buf[0] = '0' + POK_SCHED_CURRENT_THREAD;
-    buf[1] = ' ';
-    buf[2] = 'e';
-    buf[3] = 'l';
-    buf[4] = '=';
-    buf[5] = '0' + elected_id;
-    buf[6] = ' ';
-    buf[7] = 's';
-    buf[8] = 'p';
-    buf[9] = '=';
-    pok_cons_write(buf, 10);
-    uint32_t sp_val = pok_threads[elected_id].sp;
-    for (int i = 7; i >= 0; i--) {
-      buf[i] = "0123456789ABCDEF"[(sp_val >> ((7 - i) * 4)) & 0xF];
-    }
-    pok_cons_write(buf, 8);
-    pok_cons_write(skip_switch ? " SKIP\n" : " SWITCH\n", 8);
-  }
-  ctx_call++;
-#endif
-
   if (skip_switch) {
     if (!is_source_processor)
       pok_end_ipi();
@@ -557,86 +546,26 @@ void pok_sched_context_switch(const uint32_t elected_id,
 #endif
 
     uint8_t old_thread_id = POK_SCHED_CURRENT_THREAD;
-    /* CRITICAL FIX: Kernel and idle threads use MSP, not PSP. Pass NULL to skip
-     * saving. */
-    current_sp =
-        (old_thread_id == IDLE_THREAD || old_thread_id == KERNEL_THREAD)
-            ? NULL
-            : &POK_CURRENT_THREAD.sp;
-    new_sp = pok_threads[elected_id].sp;
 
-#ifdef POK_NEEDS_DEBUG
-    /* Log SP values to debug corruption */
-    if (elected_id == 1 || old_thread_id == 1) {
-      pok_cons_write("SCHED_CTX: old_thr=", 19);
-      char buf[16];
-      buf[0] = '0' + old_thread_id;
-      buf[1] = ' ';
-      pok_cons_write(buf, 2);
-      pok_cons_write("new_thr=", 8);
-      buf[0] = '0' + elected_id;
-      buf[1] = ' ';
-      pok_cons_write(buf, 2);
-      pok_cons_write("old_sp_ptr=0x", 13);
-      uint32_t val = (uint32_t)current_sp;
-      for (int i = 7; i >= 0; i--) {
-        buf[i] = "0123456789ABCDEF"[val & 0xF];
-        val >>= 4;
-      }
-      buf[8] = ' ';
-      pok_cons_write(buf, 9);
-      pok_cons_write("new_sp=0x", 9);
-      val = new_sp;
-      for (int i = 7; i >= 0; i--) {
-        buf[i] = "0123456789ABCDEF"[val & 0xF];
-        val >>= 4;
-      }
-      buf[8] = '\n';
-      pok_cons_write(buf, 9);
+    /* CRITICAL FIX: Kernel and idle threads use MSP, not PSP. Pass NULL to skip
+     * saving. MUST use old_thread_id, not POK_CURRENT_THREAD macro, since
+     * POK_SCHED_CURRENT_THREAD is updated to elected_id before context_switch
+     * is called. */
+
+    /* CRITICAL FIX: Explicitly check if we need to save the old thread.
+     * Idle and kernel threads use MSP, not PSP, so they don't need saving.
+     * Use explicit if-statement instead of ternary to ensure correctness. */
+    if (old_thread_id == IDLE_THREAD || old_thread_id == KERNEL_THREAD) {
+      current_sp = NULL; /* Don't save - idle/kernel threads use MSP */
+    } else {
+      current_sp = &pok_threads[old_thread_id].sp; /* Save this thread's PSP */
     }
-#endif
+    new_sp = pok_threads[elected_id].sp;
 
     POK_SCHED_CURRENT_THREAD = elected_id;
     if (!is_source_processor)
       pok_end_ipi();
     pok_context_switch(current_sp, new_sp);
-
-#ifdef POK_NEEDS_DEBUG
-    /* Debug: Check thread SPs after context switch */
-    if (old_thread_id == 1 || elected_id == 1 || old_thread_id == 2 ||
-        elected_id == 2) {
-      char buf[16];
-      pok_cons_write("POST_CTX: thr1=0x", 17);
-      uint32_t val = pok_threads[1].sp;
-      for (int i = 7; i >= 0; i--) {
-        buf[i] = "0123456789ABCDEF"[val & 0xF];
-        val >>= 4;
-      }
-      buf[8] = ' ';
-      pok_cons_write(buf, 9);
-
-      pok_cons_write("thr2=0x", 7);
-      val = pok_threads[2].sp;
-      for (int i = 7; i >= 0; i--) {
-        buf[i] = "0123456789ABCDEF"[val & 0xF];
-        val >>= 4;
-      }
-      buf[8] = ' ';
-      pok_cons_write(buf, 9);
-
-      /* Read actual PSP to compare */
-      uint32_t psp_val;
-      __asm volatile("mrs %0, psp" : "=r"(psp_val));
-      pok_cons_write("psp=0x", 6);
-      val = psp_val;
-      for (int i = 7; i >= 0; i--) {
-        buf[i] = "0123456789ABCDEF"[val & 0xF];
-        val >>= 4;
-      }
-      buf[8] = '\n';
-      pok_cons_write(buf, 9);
-    }
-#endif
 
     /* Note: If context switch was skipped due to pending switch,
      * POK_SCHED_CURRENT_THREAD may not match actual running thread.
@@ -646,18 +575,6 @@ void pok_sched_context_switch(const uint32_t elected_id,
 
 void pok_sched_thread(bool_t is_source_processor) {
   uint8_t elected_thread = pok_elect_thread(POK_SCHED_CURRENT_PARTITION);
-
-#ifdef POK_NEEDS_DEBUG
-  static uint32_t call_count = 0;
-  if ((call_count % 100) == 0) {
-    pok_cons_write("pok_sched_thread: elected=", 26);
-    char buf[3];
-    buf[0] = '0' + elected_thread;
-    buf[1] = '\n';
-    pok_cons_write(buf, 2);
-  }
-  call_count++;
-#endif
 
   if (CURRENT_THREAD(pok_partitions[POK_SCHED_CURRENT_PARTITION]) !=
       elected_thread) {
@@ -998,23 +915,8 @@ uint32_t pok_sched_get_current(uint32_t *thread_id) {
 
 /* Main scheduler entry point called from timer interrupts */
 void pok_sched(void) {
-#ifdef POK_NEEDS_DEBUG
-  static uint32_t sched_calls = 0;
-  if ((sched_calls % 100) == 0) {
-    pok_cons_write("pok_sched called\n", 17);
-  }
-  sched_calls++;
-#endif
-
   /* Do not schedule until initialization is complete */
   if (!pok_sched_initialized) {
-#ifdef POK_NEEDS_DEBUG
-    static uint32_t uninit_calls = 0;
-    if ((uninit_calls % 100) == 0) {
-      pok_cons_write("pok_sched: NOT INITIALIZED\n", 27);
-    }
-    uninit_calls++;
-#endif
     return;
   }
 

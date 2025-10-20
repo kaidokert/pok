@@ -241,11 +241,29 @@ pok_ret_t pok_partition_thread_create(uint32_t *thread_id,
   printf("DEBUG: After pok_thread_stack_addr, stack_vaddr=0x%x\n", stack_vaddr);
 #endif
 
-  pok_threads[id].state = POK_STATE_DELAYED_START;
+  /* Check if this is the main thread by comparing entry point */
+  bool_t is_main_thread =
+      (pok_partitions[partition_id].thread_main_entry == (uint32_t)attr->entry);
+
+  if (is_main_thread) {
+    /* Main thread must be DELAYED_START to survive pok_thread_init() reset.
+     * It will be set to RUNNABLE when partition mode becomes INIT. */
+    pok_threads[id].state = POK_STATE_DELAYED_START;
+#ifdef POK_NEEDS_DEBUG
+    printf("Thread %d is MAIN thread, set to DELAYED_START (state=%d)\n", id,
+           pok_threads[id].state);
+#endif
+  } else {
+    /* Regular threads start in DELAYED_START and will be activated when
+     * partition enters NORMAL mode */
+    pok_threads[id].state = POK_STATE_DELAYED_START;
+#ifdef POK_NEEDS_DEBUG
+    printf("Thread %d is regular thread, set to DELAYED_START (state=%d)\n", id,
+           pok_threads[id].state);
+#endif
+  }
   pok_threads[id].wakeup_time = 0;
 #ifdef POK_NEEDS_DEBUG
-  printf("Thread %d set to DELAYED_START (state=%d)\n", id,
-         pok_threads[id].state);
   printf("[TRACE] After setting - Thread 0 state: %d\n", pok_threads[0].state);
 #endif
   /* Convert absolute entry address to partition-relative offset
@@ -374,9 +392,17 @@ pok_ret_t pok_thread_delayed_start(const uint32_t id, const uint32_t us) {
   pok_threads[id].priority = pok_threads[id].base_priority;
   // reset stack
   pok_context_reset(POK_USER_STACK_SIZE, pok_threads[id].init_stack_addr);
+
+  /* Check if this is the main thread - main thread must be RUNNABLE in INIT
+   * modes */
+  bool_t is_main_thread =
+      (id == pok_partitions[pok_threads[id].partition].thread_main);
+
   if ((long long)pok_threads[id].period == INFINITE_TIME_VALUE) {
     if (pok_partitions[pok_threads[id].partition].mode ==
-        POK_PARTITION_MODE_NORMAL) {
+            POK_PARTITION_MODE_NORMAL ||
+        is_main_thread) {
+      /* Main thread is always RUNNABLE, even in INIT modes */
       if (ns == 0) {
         pok_threads[id].state = POK_STATE_RUNNABLE;
         if (pok_threads[id].time_capacity > 0)
@@ -388,17 +414,24 @@ pok_ret_t pok_thread_delayed_start(const uint32_t id, const uint32_t us) {
       }
       // the preemption is always enabled so
       pok_global_sched();
-    } else // the partition mode is cold or warm start
+    } else // the partition mode is cold or warm start, non-main thread
     {
       pok_threads[id].state = POK_STATE_DELAYED_START;
       pok_threads[id].wakeup_time = ns;
     }
   } else {
+    /* Periodic thread */
     if (pok_partitions[pok_threads[id].partition].mode ==
-        POK_PARTITION_MODE_NORMAL) { // set the first release point
+            POK_PARTITION_MODE_NORMAL ||
+        is_main_thread) {
+      /* Main thread or NORMAL mode: set the first release point */
       pok_threads[id].next_activation = ns + POK_GETTICK();
       pok_threads[id].end_time =
           pok_threads[id].deadline + pok_threads[id].next_activation;
+      if (is_main_thread && ns == 0) {
+        /* Main thread with no delay starts immediately */
+        pok_threads[id].state = POK_STATE_RUNNABLE;
+      }
     } else {
       pok_threads[id].state = POK_STATE_DELAYED_START;
       pok_threads[id].wakeup_time =

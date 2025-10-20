@@ -57,10 +57,9 @@ pok_ret_t pok_port_sampling_read(const pok_port_id_t id, void *data,
 
   {
     uint8_t pid = pok_current_partition;
-    void *ptr = data - pok_partitions[pid].base_addr;
-    uint32_t sz = pok_ports[pid].size;
+    uint32_t sz = pok_ports[id].size;
 
-    if (!pok_check_ptr_in_partition(pid, ptr, sz)) {
+    if (!pok_check_ptr_in_partition(pid, data, sz)) {
       return POK_ERRNO_EINVAL;
     }
   }

@@ -40,27 +40,23 @@
  * \return System call return value (POK_ERRNO_OK on success, error code
  * otherwise)
  */
-pok_ret_t pok_do_syscall(pok_syscall_id_t syscall_id,
-                         pok_syscall_args_t *args) {
-  pok_ret_t ret;
-  uint32_t args_addr;
-  uint32_t id;
-
-  args_addr = (uint32_t)args;
-  id = (uint32_t)syscall_id;
-
+__attribute__((noinline, noclone)) pok_ret_t
+pok_do_syscall(pok_syscall_id_t syscall_id, pok_syscall_args_t *args) {
   /* ARM Cortex-M syscall using SVC instruction
-   * r0 = syscall_id, r1 = args_addr
-   * Result returned in r0
+   * r0 = syscall_id (input/output)
+   * r1 = args pointer (input)
+   *
+   * NOTE: Using "0" constraint to force r0 reuse for input/output
    */
-  __asm volatile("mov r0, %1          \n\t" /* Load syscall ID into r0 */
-                 "mov r1, %2          \n\t" /* Load args address into r1 */
+  register pok_ret_t ret __asm("r0") = syscall_id;
+  register pok_syscall_args_t *r1 __asm("r1") = args;
+
+  __asm volatile("dsb                 \n\t" /* Memory barrier before SVC */
+                 "isb                 \n\t" /* Instruction barrier before SVC */
                  "svc #0              \n\t" /* Trigger supervisor call */
-                 "mov %0, r0          \n\t" /* Get result from r0 */
-                 : "=r"(ret)                /* Output: ret variable gets r0 */
-                 : "r"(id),
-                   "r"(args_addr)       /* Inputs: syscall_id, args pointer */
-                 : "r0", "r1", "memory" /* Clobbered: r0, r1, memory */
+                 : "+r"(ret)                /* Input/output: r0 */
+                 : "r"(r1)                  /* Input: r1 = args */
+                 : "memory"                 /* Memory clobbered by kernel */
   );
 
   return ret;

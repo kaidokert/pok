@@ -39,7 +39,13 @@
  * \brief The array that contains ALL partitions in the system.
  */
 pok_partition_t pok_partitions[POK_CONFIG_NB_PARTITIONS];
-uint32_t current_threads[POK_CONFIG_NB_PROCESSORS];
+
+/* CRITICAL FIX: Initialize current_threads to safe invalid value at boot.
+ * This will be properly initialized in pok_partition_init() before first use.
+ * We use POK_CONFIG_NB_THREADS (invalid thread ID) instead of 0 to catch
+ * any use-before-init bugs.
+ */
+uint32_t current_threads[POK_CONFIG_NB_PROCESSORS] = {0};
 
 uint8_t pok_partitions_index = 0;
 
@@ -152,6 +158,17 @@ pok_ret_t pok_partition_init() {
 #ifdef POK_NEEDS_DEBUG
   printf("Starting pok_partition_init()\n");
 #endif
+
+  /* CRITICAL: Initialize current_threads BEFORE any partition setup
+   * This must happen before first context switch to prevent PendSV from
+   * trying to save uninitialized thread context.
+   */
+#ifndef KERNEL_THREAD
+#define KERNEL_THREAD (POK_CONFIG_NB_THREADS - 1)
+#endif
+  for (uint8_t j = 0; j < POK_CONFIG_NB_PROCESSORS; j++) {
+    current_threads[j] = KERNEL_THREAD;
+  }
 
   const uint32_t partition_size[POK_CONFIG_NB_PARTITIONS] =
       POK_CONFIG_PARTITIONS_SIZE;
@@ -300,10 +317,6 @@ pok_ret_t pok_partition_init() {
 
     pok_partitions[i].mode = POK_PARTITION_MODE_INIT_WARM;
 
-    for (uint8_t i = 0; i < POK_CONFIG_NB_PROCESSORS; i++) {
-      current_threads[i] = KERNEL_THREAD;
-    }
-
 #ifdef POK_NEEDS_LOCKOBJECTS
     pok_partitions[i].lockobj_index_low = lockobj_index;
     pok_partitions[i].lockobj_index_high =
@@ -402,6 +415,19 @@ pok_ret_t pok_partition_init() {
  */
 pok_ret_t pok_partition_set_mode(const uint8_t pid,
                                  const pok_partition_mode_t mode) {
+#ifdef POK_NEEDS_DEBUG
+  pok_cons_write("SET_MODE: pid=", 14);
+  char buf[3];
+  buf[0] = '0' + pid;
+  buf[1] = ' ';
+  buf[2] = 'm';
+  pok_cons_write(buf, 3);
+  pok_cons_write("ode=", 4);
+  buf[0] = '0' + mode;
+  buf[1] = '\n';
+  pok_cons_write(buf, 2);
+#endif
+
   switch (mode) {
   case POK_PARTITION_MODE_NORMAL:
 #ifdef POK_NEEDS_DEBUG

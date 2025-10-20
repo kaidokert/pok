@@ -18,6 +18,6 @@
 #include <middleware/queue.h>
 
 pok_port_t pok_ports[POK_CONFIG_NB_PORTS];
-const char pok_queue_data[1024];
+char pok_queue_data[1024];
 pok_queue_t pok_queue;
 #endif

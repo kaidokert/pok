@@ -109,6 +109,19 @@ pok_ret_t pok_port_get(const uint32_t pid, void *data,
     memcpy(data, &pok_queue.data[pok_ports[pid].index + pok_ports[pid].off_b],
            size);
 
+#ifdef POK_NEEDS_DEBUG
+    if (size == 4) {
+      uint32_t *val_ptr = (uint32_t *)data;
+      uint32_t *src_ptr =
+          (uint32_t *)&pok_queue
+              .data[pok_ports[pid].index + pok_ports[pid].off_b];
+      printf("[PORT_READ] pid=%d idx=%d off_b=%d size=%d data_addr=0x%x "
+             "src_addr=0x%x value=%u\n",
+             pid, pok_ports[pid].index, pok_ports[pid].off_b, size,
+             (uint32_t)data, (uint32_t)src_ptr, *val_ptr);
+    }
+#endif
+
     return POK_ERRNO_OK;
 #endif
 
@@ -164,6 +177,16 @@ pok_ret_t pok_port_write(const uint8_t pid, const void *data,
     if (size > pok_ports[pid].size) {
       return POK_ERRNO_SIZE;
     }
+
+#ifdef POK_NEEDS_DEBUG
+    if (size == 4) {
+      uint32_t *val_ptr = (uint32_t *)data;
+      printf("[PORT_WRITE] pid=%d idx=%d off_e=%d size=%d data_addr=0x%x "
+             "value=%u\n",
+             pid, pok_ports[pid].index, pok_ports[pid].off_e, size,
+             (uint32_t)data, *val_ptr);
+    }
+#endif
 
     memcpy(&pok_queue.data[pok_ports[pid].index + pok_ports[pid].off_e], data,
            size);

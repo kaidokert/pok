@@ -37,11 +37,14 @@ int pok_pm_init() {
 
   // Use BSP-defined user memory region for heap
   // This ensures alignment with BSP memory allocation expectations
-  /* Heap must be aligned for MPU power-of-2 regions
-   * Use 32KB alignment to support 32KB partitions
-   * With 128KB SRAM: 32KB kernel + 96KB heap (3x 32KB partitions) */
-  pok_arm_pm_heap_start = pok_arm_pm_brk = 0x20008000; /* 32KB aligned */
-  pok_arm_pm_heap_end = 0x20020000; /* End of 128KB SRAM gives 96KB heap */
+  /* CRITICAL: Heap must start AFTER all partition memory regions!
+   * Partitions are at fixed addresses (0x20008000, 0x20010000, etc.)
+   * Each partition is 32000 bytes (0x7D00), so:
+   * - Partition 0: 0x20008000 - 0x2000FD00
+   * - Partition 1: 0x20010000 - 0x20017D00
+   * Heap starts after last partition to avoid overwriting partition code */
+  pok_arm_pm_heap_start = pok_arm_pm_brk = 0x20017D00; /* After partition 1 */
+  pok_arm_pm_heap_end = 0x20020000;                    /* End of 128KB SRAM */
 
 #ifdef POK_NEEDS_DEBUG
   printf("pok_pm_init: heap_start=0x%x, brk=0x%x, heap_end=0x%x\n",

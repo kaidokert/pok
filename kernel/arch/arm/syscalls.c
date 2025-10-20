@@ -161,10 +161,32 @@ void __attribute__((used)) debug_check_thread1_frame(uint32_t sp_value) {
 #endif
 }
 
+/* Debug function to log values loaded by PendSV */
+void __attribute__((used, noinline)) debug_pendsv_load(uint32_t loaded_sp) {
+#ifdef POK_NEEDS_DEBUG
+  extern uint32_t g_next_sp_value;
+  printf("PENDSV_LOAD: g_next_sp_value=%x loaded_sp=%x\n", g_next_sp_value,
+         loaded_sp);
+#else
+  (void)loaded_sp;
+#endif
+}
+
+/* Debug variables for PendSV - written by asm, read after fault */
+volatile uint32_t __attribute__((used)) pendsv_debug_flag_value = 0xDEADBEEF;
+volatile uint32_t __attribute__((used)) pendsv_debug_r0_after_load = 0xDEADBEEF;
+volatile uint32_t __attribute__((used)) pendsv_debug_r2_addr = 0xDEADBEEF;
+volatile uint32_t __attribute__((used)) pendsv_debug_psp_after_set = 0xDEADBEEF;
+
+/* Flag to track if timer has been enabled after first context switch */
+volatile uint8_t __attribute__((used)) pendsv_timer_enabled = 0;
+
 /*
  * SVC Handler implementation - called by naked wrapper
+ * CRITICAL: noinline prevents compiler from optimizing away frame accesses
  */
-static void __attribute__((used)) svc_handler_impl(uint32_t *frame) {
+static void __attribute__((used, noinline, noclone))
+svc_handler_impl(uint32_t *frame) {
   pok_ret_t syscall_ret;
   pok_syscall_id_t syscall_id;
 
@@ -178,11 +200,56 @@ static void __attribute__((used)) svc_handler_impl(uint32_t *frame) {
   /* ARM SYSCALL HANDLING WITH PROPER SYSCALL INFO */
   pok_syscall_info_t syscall_info;
 
-  /* Get syscall arguments from registers */
-  syscall_id = (pok_syscall_id_t)frame[0]; /* r0 */
+  /* Get syscall arguments from registers
+   * Use volatile to prevent compiler from caching or reordering these reads */
+  volatile uint32_t *vframe = (volatile uint32_t *)frame;
 
+  /* DEBUG: Read all 8 words from frame before asserting */
+  uint32_t frame_r0 = vframe[0];
+  (void)frame_r0; /* May be used in debug output below */
+
+  syscall_id = (pok_syscall_id_t)vframe[0]; /* r0 */
+
+  /* Declare args pointer early so it can be used in debug code */
+  pok_syscall_args_t *args = (pok_syscall_args_t *)vframe[1];
+
+  /* Memory barrier to ensure frame read completes before use */
+  __asm volatile("" ::: "memory");
+
+  /* CRITICAL ASSERTION: Syscall ID must never be 0 - indicates register
+   * corruption */
+  if (syscall_id == 0) {
 #ifdef POK_NEEDS_DEBUG
-  printf("SVC: id=%d thr=%d\n", syscall_id, POK_SCHED_CURRENT_THREAD);
+    /* Add extra debug to understand what's happening */
+    uint32_t actual_psp;
+    __asm volatile("mrs %0, psp" : "=r"(actual_psp));
+
+    printf("\n!!! SYSCALL CORRUPTION DEBUG !!!\n");
+    printf("frame ptr = 0x%x, PSP = 0x%x\n", (uint32_t)frame, actual_psp);
+
+    /* Print entire hardware frame */
+    printf("HW frame [r0-xpsr]:");
+    for (int i = 0; i < 8; i++) {
+      printf(" 0x%x", vframe[i]);
+    }
+    printf("\n");
+
+    /* Print detailed breakdown */
+    printf("  r0 = 0x%x (syscall_id - CORRUPT!)\n", vframe[0]);
+    printf("  r1 = 0x%x (args ptr)\n", vframe[1]);
+    printf("  r2 = 0x%x\n", vframe[2]);
+    printf("  r3 = 0x%x\n", vframe[3]);
+    printf("  r12 = 0x%x\n", vframe[4]);
+    printf("  LR = 0x%x\n", vframe[5]);
+    printf("  PC = 0x%x\n", vframe[6]);
+    printf("  xPSR = 0x%x\n", vframe[7]);
+#endif
+  }
+
+#if 0
+#ifdef POK_NEEDS_DEBUG
+  printf("SVC: id=%d thr=%d PC=0x%x r0=0x%x\n", syscall_id, POK_SCHED_CURRENT_THREAD, vframe[6], vframe[0]);
+#endif
 #endif
 
   /* Populate syscall info structure like x86 does */
@@ -192,15 +259,11 @@ static void __attribute__((used)) svc_handler_impl(uint32_t *frame) {
   syscall_info.base_addr = 0;
   syscall_info.thread = POK_SCHED_CURRENT_THREAD;
 
-  /* Use args pointer directly - syscall implementation handles base address
-   * conversion */
-  pok_syscall_args_t *args = (pok_syscall_args_t *)frame[1];
-
   /* Call core syscall handler with proper info */
   syscall_ret = pok_core_syscall(syscall_id, args, &syscall_info);
 
-  /* Return the result in r0 */
-  frame[0] = (uint32_t)syscall_ret;
+  /* Return the result in r0 - write to volatile frame */
+  vframe[0] = (uint32_t)syscall_ret;
 
   /* Memory barriers before returning to thread mode to ensure all kernel
    * memory operations complete and instructions are synchronized before
@@ -257,7 +320,12 @@ void __attribute__((naked, no_instrument_function)) SVC_Handler(void) {
 
       "ldmia r0!, {r4-r11}        \n" /* Restore SW frame, r0 now points to HW
                                        */
+      "mov r3, r0                 \n" /* Save r0 (expected PSP) */
       "msr psp, r0                \n" /* Set PSP to HW frame */
+      "dsb                        \n" /* Ensure PSP write completes */
+      "isb                        \n"
+
+      /* DEBUG: PSP verification removed to avoid linker errors */
 
       /* Clear reschedule flag FIRST, then clear PendSV */
       "ldr r1, =g_reschedule_needed \n"
@@ -300,25 +368,15 @@ void __attribute__((naked, no_instrument_function)) PendSV_Handler(void) {
   (void)g_next_sp_value;
 
   __asm volatile(
-      /* DEBUG: Store PendSV entry marker */
-      "ldr r2, =g_debug_pendsv_entry \n"
-      "movs r3, #0xBB              \n"
-      "strb r3, [r2]               \n"
-
       /* IDEMPOTENT RESCHEDULE PATTERN:
          Check if a reschedule is actually needed. If not, just return.
          This makes PendSV safe to call multiple times. */
       "ldr r0, =g_reschedule_needed \n" /* Load address of flag */
+      "ldrb r1, [r0]              \n"   /* Load flag value */
 
-      /* DEBUG: Store g_reschedule_needed address and value */
-      "ldr r2, =g_debug_resched_addr \n"
-      "str r0, [r2]                \n"
-
-      "ldrb r1, [r0]              \n" /* Load flag value */
-
-      /* DEBUG: Store g_reschedule_needed value */
-      "ldr r2, =g_debug_resched_val \n"
-      "strb r1, [r2]               \n"
+      /* DEBUG: Store flag value to global */
+      "ldr r3, =pendsv_debug_flag_value \n"
+      "str r1, [r3]               \n"
 
       "cbz r1, 3f                 \n" /* If not set, return immediately */
 
@@ -337,6 +395,9 @@ void __attribute__((naked, no_instrument_function)) PendSV_Handler(void) {
       /* Check if we need to save current thread context */
       "ldr r1, =g_current_sp_ptr  \n" /* Load address of pointer to current
                                          thread's SP field */
+
+      /* DEBUG: g_current_sp_ptr storage removed to avoid linker errors */
+
       "ldr r1, [r1]               \n" /* Load the pointer itself */
       "cbz r1, 1f                 \n" /* Skip if NULL - no thread to save */
 
@@ -362,42 +423,41 @@ void __attribute__((naked, no_instrument_function)) PendSV_Handler(void) {
 
       "1:                         \n" /* Load new thread context */
 
-      /* DEBUG: Store marker before loading next SP */
-      "ldr r3, =g_debug_restore_marker \n"
-      "movs r1, #0xAA              \n"
-      "strb r1, [r3]               \n"
-
       "ldr r2, =g_next_sp_value   \n" /* r2 = &g_next_sp_value */
 
       /* DEBUG: Store g_next_sp_value address */
-      "ldr r3, =g_debug_next_sp_addr \n"
-      "str r2, [r3]                \n"
+      "ldr r3, =pendsv_debug_r2_addr \n"
+      "str r2, [r3]               \n"
 
       "ldr r0, [r2]               \n" /* r0 = g_next_sp_value (SW frame base) */
 
-      /* DEBUG: Store loaded g_next_sp_value */
-      "ldr r3, =g_debug_next_sp_val \n"
-      "str r0, [r3]                \n"
-
-      "cbz r0, 3f                 \n" /* Skip if NULL - no context switch */
-
-      /* DEBUG: Store loaded SP value for inspection */
-      "ldr r3, =g_debug_loaded_sp \n"
+      /* DEBUG: Store loaded r0 value */
+      "ldr r3, =pendsv_debug_r0_after_load \n"
       "str r0, [r3]               \n"
+
+      /* CRITICAL: No function calls allowed in PendSV!
+       * Calling printf() corrupts the stack and breaks register restore.
+       * Simple NULL check only - no debug output in PendSV handler itself. */
+      "cbz r0, 3f                 \n" /* Skip if NULL - no context switch */
 
       /* CRITICAL FIX: Restore r4-r11 from SW frame, r0 becomes HW frame pointer
        */
       "ldmia r0!, {r4-r11}        \n" /* Restore r4-r11, r0 now = SW_base + 32 =
                                          HW frame */
 
-      /* DEBUG: Store final PSP value before setting */
-      "ldr r3, =g_debug_final_psp \n"
-      "str r0, [r3]               \n"
-
       /* Set PSP to hardware frame for exception return */
       "msr psp, r0                \n" /* PSP = SW_base + 32 = HW frame base */
+      "dsb                        \n" /* Ensure PSP write completes */
+      "isb                        \n"
 
-      /* Clear reschedule flag to mark completion */
+      /* DEBUG: Read PSP back and store it */
+      "mrs r3, psp                \n"
+      "ldr r2, =pendsv_debug_psp_after_set \n"
+      "str r3, [r2]               \n"
+
+      /* Clear reschedule flag to mark completion.
+       * CRITICAL: pok_context_switch() must ALWAYS update ALL globals (old_sp,
+       * new_sp, flag), not conditionally based on this flag's state. */
       "ldr r1, =g_reschedule_needed \n"
       "movs r3, #0                \n"
       "strb r3, [r1]              \n"
@@ -406,9 +466,31 @@ void __attribute__((naked, no_instrument_function)) PendSV_Handler(void) {
       "dsb                        \n"
       "isb                        \n"
 
+      /* CRITICAL: Enable SysTick timer after first context switch completes.
+       * Timer was configured but not enabled during pok_timer_init() to avoid
+       * timer interrupts firing before PSP is set up. Now that PSP is loaded
+       * with the first thread's stack, it's safe to start the timer.
+       * We use a static flag to ensure we only do this once. */
+      "ldr r1, =pendsv_timer_enabled \n"
+      "ldrb r2, [r1]              \n"
+      "cbnz r2, 2f                \n" /* Skip if already enabled */
+
+      /* Enable SysTick: enable + interrupt + processor clock */
+      "ldr r1, =0xE000E010        \n" /* SysTick CSR address */
+      "movs r2, #7                \n" /* ENABLE | TICKINT | CLKSOURCE */
+      "str r2, [r1]               \n"
+      "dsb                        \n"
+      "isb                        \n"
+
+      /* Mark timer as enabled */
+      "ldr r1, =pendsv_timer_enabled \n"
+      "movs r2, #1                \n"
+      "strb r2, [r1]              \n"
+      "dsb                        \n"
+
+      "2:                         \n"
+
       /* DEBUG: Store PSP value before decision */
-      "ldr r3, =g_debug_pendsv_psp \n"
-      "str r0, [r3]               \n"
 
       /* Check if new SP is in partition memory (RAM 0x20010000+) */
       /* Kernel threads use high RAM (0x2001F000+), partition threads use low
@@ -420,17 +502,12 @@ void __attribute__((naked, no_instrument_function)) PendSV_Handler(void) {
       "bhs 4f                     \n" /* If SP >= threshold, kernel thread */
 
       /* DEBUG: Mark we're taking partition thread path */
-      "ldr r3, =g_debug_pendsv_path \n"
-      "movs r2, #1                \n"
-      "strb r2, [r3]              \n"
 
       /* Partition thread: Force EXC_RETURN to Thread mode using PSP
          (0xFFFFFFFD) */
       "ldr lr, =0xFFFFFFFD        \n" /* EXC_RETURN: Thread mode, use PSP */
 
       /* DEBUG: Store EXC_RETURN value */
-      "ldr r3, =g_debug_pendsv_lr \n"
-      "str lr, [r3]               \n"
 
       "bx lr                      \n" /* Return from exception */
 

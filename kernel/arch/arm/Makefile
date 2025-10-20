@@ -10,6 +10,7 @@ LO_TARGET=	arm.lo
 LO_OBJS=	arch.o \
 		space.o \
 		thread.o \
+		start.o \
 		syscalls.o \
 		exceptions.o \
 		mpu.o \

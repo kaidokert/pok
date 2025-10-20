@@ -36,18 +36,36 @@ pok_ret_t pok_port_create(char *name, const pok_port_size_t size,
 
   ret = POK_ERRNO_OK;
 
+#ifdef POK_NEEDS_DEBUG
+  printf("[PORT_CREATE] name='%s' size=%d direction=%d kind=%d\n", name, size,
+         direction, kind);
+  printf("[PORT_CREATE] POK_PORT_MAX_SIZE=%d queue.available_size=%d\n",
+         POK_PORT_MAX_SIZE, pok_queue.available_size);
+#endif
+
   if (size > POK_PORT_MAX_SIZE) {
+#ifdef POK_NEEDS_DEBUG
+    printf("[PORT_CREATE] ERROR: size %d > POK_PORT_MAX_SIZE %d\n", size,
+           POK_PORT_MAX_SIZE);
+#endif
     POK_ERROR_CURRENT_PARTITION(POK_ERROR_KIND_PARTITION_CONFIGURATION);
     return POK_ERRNO_PORT;
   }
 
   if (size > pok_queue.available_size) {
+#ifdef POK_NEEDS_DEBUG
+    printf("[PORT_CREATE] ERROR: size %d > queue.available_size %d\n", size,
+           pok_queue.available_size);
+#endif
     POK_ERROR_CURRENT_PARTITION(POK_ERROR_KIND_PARTITION_CONFIGURATION);
     return POK_ERRNO_PORT;
   }
 
   if ((direction != POK_PORT_DIRECTION_IN) &&
       (direction != POK_PORT_DIRECTION_OUT)) {
+#ifdef POK_NEEDS_DEBUG
+    printf("[PORT_CREATE] ERROR: invalid direction %d\n", direction);
+#endif
     POK_ERROR_CURRENT_PARTITION(POK_ERROR_KIND_PARTITION_CONFIGURATION);
     return POK_ERRNO_PORT;
   }

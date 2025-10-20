@@ -32,3 +32,4 @@ GTAGS
 *.txt
 *.debug
 *.elf.asm
+examples/middleware-sampling/generated-code-arm/*

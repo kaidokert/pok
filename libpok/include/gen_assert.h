@@ -36,7 +36,7 @@
  * ASSERT_RET - Check POK return values in generated code
  *
  * Used by Ocarina-generated code to verify POK syscall return values.
- * In debug builds, prints error information. In release builds, no-op.
+ * FATAL: Halts execution on assertion failure.
  */
 #ifndef ASSERT_RET
 #ifdef POK_NEEDS_DEBUG
@@ -44,13 +44,22 @@
   do {                                                                         \
     pok_ret_t __ret = (ret);                                                   \
     if (__ret != POK_ERRNO_OK) {                                               \
-      printf("[ASSERT] Error %d at %s:%d\n", __ret, __FILE__, __LINE__);       \
+      printf("[FATAL ASSERT] Error %d at %s:%d - HALTING\n", __ret, __FILE__,  \
+             __LINE__);                                                        \
+      while (1) {                                                              \
+        __asm volatile("wfi");                                                 \
+      }                                                                        \
     }                                                                          \
   } while (0)
 #else
 #define ASSERT_RET(ret)                                                        \
   do {                                                                         \
-    (void)(ret);                                                               \
+    pok_ret_t __ret = (ret);                                                   \
+    if (__ret != POK_ERRNO_OK) {                                               \
+      while (1) {                                                              \
+        __asm volatile("wfi");                                                 \
+      }                                                                        \
+    }                                                                          \
   } while (0)
 #endif
 #endif /* ASSERT_RET */
@@ -61,6 +70,7 @@
  * Used by Ocarina-generated code to verify POK syscall return values
  * while allowing one specific error code (e.g., POK_ERRNO_EMPTY for
  * reading from empty sampling ports).
+ * FATAL: Halts execution on unexpected errors.
  */
 #ifndef ASSERT_RET_WITH_EXCEPTION
 #ifdef POK_NEEDS_DEBUG
@@ -68,14 +78,23 @@
   do {                                                                         \
     pok_ret_t __ret = (ret);                                                   \
     if (__ret != POK_ERRNO_OK && __ret != (exc)) {                             \
-      printf("[ASSERT] Error %d at %s:%d\n", __ret, __FILE__, __LINE__);       \
+      printf(                                                                  \
+          "[FATAL ASSERT] Error %d at %s:%d (expected %d or OK) - HALTING\n",  \
+          __ret, __FILE__, __LINE__, (exc));                                   \
+      while (1) {                                                              \
+        __asm volatile("wfi");                                                 \
+      }                                                                        \
     }                                                                          \
   } while (0)
 #else
 #define ASSERT_RET_WITH_EXCEPTION(ret, exc)                                    \
   do {                                                                         \
-    (void)(ret);                                                               \
-    (void)(exc);                                                               \
+    pok_ret_t __ret = (ret);                                                   \
+    if (__ret != POK_ERRNO_OK && __ret != (exc)) {                             \
+      while (1) {                                                              \
+        __asm volatile("wfi");                                                 \
+      }                                                                        \
+    }                                                                          \
   } while (0)
 #endif
 #endif /* ASSERT_RET_WITH_EXCEPTION */

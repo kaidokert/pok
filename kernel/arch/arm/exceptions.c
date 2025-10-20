@@ -330,6 +330,29 @@ static void __attribute__((used)) BusFault_Handler_C(uint32_t *frame) {
   fault_puts(", PSR=");
   fault_put_hex(frame[7]);
   fault_puts("\n");
+
+  /* PendSV debug values */
+  extern volatile uint32_t pendsv_debug_flag_value;
+  extern volatile uint32_t pendsv_debug_r0_after_load;
+  extern volatile uint32_t pendsv_debug_r2_addr;
+  extern volatile uint32_t pendsv_debug_psp_after_set;
+  fault_puts("PendSV Debug:\n");
+  fault_puts("  flag_value=");
+  fault_put_hex(pendsv_debug_flag_value);
+  fault_puts("\n  r0_after_load=");
+  fault_put_hex(pendsv_debug_r0_after_load);
+  fault_puts("\n  r2_addr=");
+  fault_put_hex(pendsv_debug_r2_addr);
+  fault_puts("\n  psp_after_set=");
+  fault_put_hex(pendsv_debug_psp_after_set);
+  fault_puts("\n");
+
+  /* Print actual PSP for comparison */
+  uint32_t actual_psp;
+  __asm volatile("mrs %0, psp" : "=r"(actual_psp));
+  fault_puts("  actual_psp=");
+  fault_put_hex(actual_psp);
+  fault_puts("\n");
 #endif
 
   /* DESIGN DECISION: Hard-halt on bus faults (see MemManage handler for
@@ -356,6 +379,7 @@ static void __attribute__((used)) UsageFault_Handler_C(uint32_t *frame) {
   pok_cons_write("!!! USAGEFAULT !!!\n", 19);
 
   if (frame == NULL) {
+    pok_cons_write("FAULT: NULL frame\n", 18);
     __disable_irq();
     while (1) {
       __asm volatile("wfi");
@@ -366,6 +390,36 @@ static void __attribute__((used)) UsageFault_Handler_C(uint32_t *frame) {
 
   /* Read CFSR to check fault status */
   cfsr = SCB_CFSR;
+
+  /* Output CFSR value */
+  pok_cons_write("CFSR=0x", 7);
+  char hex[9];
+  uint32_t temp = cfsr;
+  for (int i = 7; i >= 0; i--) {
+    hex[i] = "0123456789ABCDEF"[temp & 0xF];
+    temp >>= 4;
+  }
+  hex[8] = '\n';
+  pok_cons_write(hex, 9);
+
+  /* Output PC and LR */
+  pok_cons_write("PC=0x", 5);
+  temp = frame[6];
+  for (int i = 7; i >= 0; i--) {
+    hex[i] = "0123456789ABCDEF"[temp & 0xF];
+    temp >>= 4;
+  }
+  hex[8] = ' ';
+  pok_cons_write(hex, 9);
+
+  pok_cons_write("LR=0x", 5);
+  temp = frame[5];
+  for (int i = 7; i >= 0; i--) {
+    hex[i] = "0123456789ABCDEF"[temp & 0xF];
+    temp >>= 4;
+  }
+  hex[8] = '\n';
+  pok_cons_write(hex, 9);
 
   /* Clear Usage fault flags in CFSR using write-1-to-clear semantics
    * Only clear the UFSR bits that are actually set to avoid affecting

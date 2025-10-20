@@ -21,7 +21,8 @@ LO_OBJS=	partition.o \
 			boot.o \
 			cons.o \
 			assert.o \
-			multiprocessing.o
+			multiprocessing.o \
+			memcheck.o
 
 LO_DEPS=
 

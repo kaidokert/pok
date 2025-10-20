@@ -127,20 +127,21 @@ pok_ret_t pok_timer_init(void) {
   /* Clear any pending SysTick before enabling to avoid spurious tick */
   *SCB_ICSR |= SCB_ICSR_PENDSTCLR;
 
-  /* Re-enable timer with very slow rate for debugging */
-  /* Configure SysTick: enable, interrupt, use processor clock */
-  SYSTICK_CSR =
-      SYSTICK_CSR_ENABLE | SYSTICK_CSR_TICKINT | SYSTICK_CSR_CLKSOURCE;
+  /* CRITICAL: DO NOT enable SysTick here!
+   * Timer must not fire until AFTER the first context switch completes and PSP
+   * is set. If we enable it now, the timer will fire during the first
+   * pok_context_switch() call, BEFORE PendSV has executed and loaded the first
+   * thread's context into PSP. This would cause the timer interrupt to trigger
+   * a nested context switch while PSP=0, leading to a BusFault when trying to
+   * save the "current" thread's context.
+   *
+   * Instead, SysTick will be enabled by PendSV_Handler after it loads the first
+   * thread.
+   */
 
-  /* Data Synchronization Barrier to ensure SysTick configuration completes */
-  __asm volatile("dsb" : : : "memory");
-  __asm volatile("isb" : : : "memory");
-
-  /* Enable global interrupts - CRITICAL for SysTick to fire */
-  __asm volatile("cpsie i" : : : "memory");
-
-  /* SysTick now configured and enabled with interrupts enabled */
-  pok_cons_write("Timer init SUCCESS: SysTick configured and enabled\n", 52);
+  /* SysTick hardware configured but NOT enabled yet */
+  pok_cons_write("Timer init SUCCESS: SysTick configured (not enabled yet)\n",
+                 58);
 
   return POK_ERRNO_OK;
 }

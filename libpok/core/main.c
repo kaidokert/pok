@@ -12,6 +12,7 @@
  *                                      Copyright (c) 2007-2025 POK team
  */
 
+#include <core/thread.h>
 #include <errno.h>
 
 #ifdef POK_NEEDS_BLACKBOARDS
@@ -39,5 +40,16 @@ int __pok_partition_start() {
 
 #endif    /* POK_NEEDS_MIDDLEWARE */
   main(); /* main loop from user */
-  return (0);
+
+  /* Never return - terminate thread via syscall to avoid trying to jump to
+   * kernel address. Partitions run in unprivileged mode with MPU protection
+   * and cannot access kernel memory where the thread exit stub resides. */
+  pok_thread_stop_self();
+
+  /* Should never reach here, but loop forever if syscall fails */
+  while (1) {
+    /* Wait for interrupt */
+  }
+
+  return (0); /* Keep return for compiler */
 }
