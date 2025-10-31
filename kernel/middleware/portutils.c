@@ -63,17 +63,34 @@ pok_ret_t pok_port_get(const uint32_t pid, void *data,
   pok_port_size_t tmp_size2;
 #endif
 
+#ifdef POK_NEEDS_DEBUG
+  printf("[PORT_GET] pid=%d size=%d kind=%d empty=%d\n", pid, size,
+         pok_ports[pid].kind, pok_ports[pid].empty);
+#endif
+
   switch (pok_ports[pid].kind) {
 
 #ifdef POK_NEEDS_PORTS_QUEUEING
   case POK_PORT_KIND_QUEUEING:
     if (pok_ports[pid].empty == TRUE) {
+      printf("[PORT_GET] Queue is empty, returning EINVAL\n");
       return POK_ERRNO_EINVAL;
     }
 
     if (pok_ports[pid].size < size) {
       return POK_ERRNO_SIZE;
     }
+
+#ifdef POK_NEEDS_DEBUG
+    if (size == 4) {
+      uint32_t queue_offset = pok_ports[pid].index + pok_ports[pid].off_b;
+      uint32_t *queue_ptr = (uint32_t *)&pok_queue.data[queue_offset];
+      printf("[Q_READ_PRE] pid=%d idx=%d off_b=%d queue_off=%u queue=0x%x "
+             "queue_value=%u\n",
+             pid, pok_ports[pid].index, pok_ports[pid].off_b, queue_offset,
+             (uint32_t)queue_ptr, *queue_ptr);
+    }
+#endif
 
     if ((pok_ports[pid].off_b + size) > pok_ports[pid].size) {
       tmp_size = pok_ports[pid].size - pok_ports[pid].off_b;
@@ -85,6 +102,14 @@ pok_ret_t pok_port_get(const uint32_t pid, void *data,
       memcpy(data, &pok_queue.data[pok_ports[pid].index + pok_ports[pid].off_b],
              size);
     }
+
+#ifdef POK_NEEDS_DEBUG
+    if (size == 4) {
+      uint32_t *val_ptr = (uint32_t *)data;
+      printf("[Q_READ_POST] pid=%d data=0x%x read_value=%u\n", pid,
+             (uint32_t)data, *val_ptr);
+    }
+#endif
 
     pok_ports[pid].off_b = (pok_ports[pid].off_b + size) % pok_ports[pid].size;
 
@@ -147,6 +172,18 @@ pok_ret_t pok_port_write(const uint8_t pid, const void *data,
     if (size > pok_ports[pid].size) {
       return POK_ERRNO_SIZE;
     }
+
+#ifdef POK_NEEDS_DEBUG
+    if (size == 4) {
+      uint32_t *val_ptr = (uint32_t *)data;
+      uint32_t queue_offset = pok_ports[pid].index + pok_ports[pid].off_e;
+      uint32_t *queue_ptr = (uint32_t *)&pok_queue.data[queue_offset];
+      printf("[Q_WRITE] pid=%d idx=%d off_e=%d queue_off=%u data=0x%x "
+             "queue=0x%x value=%u\n",
+             pid, pok_ports[pid].index, pok_ports[pid].off_e, queue_offset,
+             (uint32_t)data, (uint32_t)queue_ptr, *val_ptr);
+    }
+#endif
 
     if ((pok_ports[pid].off_e + size) > pok_ports[pid].size) {
       tmp_size = pok_ports[pid].size - pok_ports[pid].off_e;
@@ -284,7 +321,11 @@ bool_t pok_own_port(const uint8_t partition, const uint8_t port) {
   }
 
 #ifdef POK_CONFIG_PARTITIONS_PORTS
-  if ((((uint8_t[])POK_CONFIG_PARTITIONS_PORTS)[port]) == partition) {
+  uint8_t owner = ((uint8_t[])POK_CONFIG_PARTITIONS_PORTS)[port];
+#ifdef POK_NEEDS_DEBUG
+  printf("[OWN_PORT] partition=%d port=%d owner=%d\n", partition, port, owner);
+#endif
+  if (owner == partition) {
     return TRUE;
   }
 #endif

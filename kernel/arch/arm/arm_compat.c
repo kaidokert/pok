@@ -20,5 +20,17 @@ pok_ret_t pok_bsp_time_init(void) {
 
 /* Scheduler election function - single-core ARM implementation */
 uint8_t pok_sched_election(void) {
-  return 0; /* Single processor system - no election needed */
+  /* Forward declaration - defined in kernel/core/sched.c */
+  extern uint8_t pok_elect_partition(void);
+  extern uint8_t POK_SCHED_CURRENT_PARTITION;
+
+  /* Elect next partition based on timeslot scheduling */
+  uint8_t elected_partition = pok_elect_partition();
+
+  /* Update current partition if changed */
+  if (elected_partition != POK_SCHED_CURRENT_PARTITION) {
+    POK_SCHED_CURRENT_PARTITION = elected_partition;
+  }
+
+  return elected_partition;
 }

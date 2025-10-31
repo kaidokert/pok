@@ -117,6 +117,20 @@ pok_ret_t pok_timer_init(void) {
   /* Clear current value */
   SYSTICK_CVR = 0;
 
+#ifdef POK_NEEDS_DEBUG
+  /* Verify SysTick registers were set correctly */
+  uint32_t verify_rvr = SYSTICK_RVR;
+  uint32_t verify_cvr = SYSTICK_CVR;
+  uint32_t verify_csr = SYSTICK_CSR;
+  pok_cons_write("SysTick init: RVR=", 18);
+  pok_cons_write(" CVR=", 5);
+  pok_cons_write(" CSR=", 5);
+  pok_cons_write("\n", 1);
+  (void)verify_rvr;
+  (void)verify_cvr;
+  (void)verify_csr;
+#endif
+
   /* Set SysTick priority to lowest (same as PendSV) for proper tail-chaining
    * Using NVIC helper to ensure proper ARM_PRIORITY_BITS encoding
    * NVIC expects 4-bit priority values (0-15), not raw 8-bit values
@@ -150,23 +164,52 @@ pok_ret_t pok_timer_init(void) {
 volatile uint32_t pok_systick_counter = 0;
 
 void pok_timer_handler(void) {
+  /* SysTick interrupt processing - increment global counter */
+  pok_systick_counter++;
+
+  /* DEBUG: Check if we're being called with interrupts disabled */
+  uint32_t primask;
+  __asm volatile("mrs %0, PRIMASK" : "=r"(primask));
+  if ((primask & 0x1u) != 0) {
+    pok_cons_write("!!! TIMER FIRED WITH INTERRUPTS DISABLED !!!\n", 45);
+  }
+
 #ifdef POK_NEEDS_DEBUG
-  static uint8_t handler_entry_count = 0;
-  if (handler_entry_count < 2) {
-    pok_cons_write("TIMER_HANDLER_ENTRY\n", 20);
-    handler_entry_count++;
+  /* Print first 5 ticks AND every 1000th tick to verify timer continues */
+  if (pok_systick_counter <= 5 || (pok_systick_counter % 1000) == 0) {
+    pok_cons_write("TICK: ", 6);
+    char num_buf[12];
+    uint32_t val = pok_systick_counter;
+    int idx = 11;
+    num_buf[idx--] = '\n';
+    do {
+      num_buf[idx--] = '0' + (val % 10);
+      val /= 10;
+    } while (val > 0 && idx >= 0);
+    pok_cons_write(&num_buf[idx + 1], 11 - idx);
   }
 #endif
 
   /* Clear SysTick interrupt flag (automatically cleared by reading CSR) */
   (void)SYSTICK_CSR;
 
-  /* SysTick interrupt processing - increment global counter */
-  pok_systick_counter++;
+#ifdef POK_NEEDS_DEBUG
+  if (pok_systick_counter <= 10) {
+    pok_cons_write("BEFORE_TIME_UPDATE\n", 19);
+  }
+#endif
 
   /* Print every 100th tick to verify interrupts are firing */
   if ((pok_systick_counter % 100) == 0) {
     pok_cons_write("TICK!", 5);
+  }
+
+  /* Debug: Print tick counter value every 10000 ticks (0.1 second) */
+  if ((pok_systick_counter % 10000) == 0) {
+    volatile uint64_t debug_now = pok_tick_counter;
+    if (debug_now >= 100000000ULL) { /* 100ms */
+      pok_cons_write("TICK_COUNTER_100MS_REACHED\n", 27);
+    }
   }
 
 /* Update POK system time in nanoseconds - consistent with other POK
@@ -184,11 +227,30 @@ void pok_timer_handler(void) {
     pok_tick_counter += 1; /* distribute leftover nanoseconds */
   }
 
-  /* Single-core ARM - no scheduler election needed */
-  /* (void)pok_sched_election(); */
+#ifdef POK_NEEDS_DEBUG
+  if (pok_systick_counter <= 10) {
+    pok_cons_write("BEFORE_ELECTION\n", 16);
+  }
+#endif
+
+  /* Single-core ARM - call scheduler to handle timeslot switching */
+  (void)pok_sched_election();
+
+#ifdef POK_NEEDS_DEBUG
+  if (pok_systick_counter <= 10) {
+    pok_cons_write("BEFORE_SCHED\n", 13);
+  }
+#endif
 
   /* Call scheduler to handle timeslicing and partition switching */
   pok_sched();
+
+#ifdef POK_NEEDS_DEBUG
+  /* Debug: Print at handler exit to verify completion */
+  if (pok_systick_counter <= 10) {
+    pok_cons_write("TIMER_EXIT\n", 11);
+  }
+#endif
 }
 
 /* BSP time initialization moved to arm_compat.c to avoid multiple definitions

@@ -91,6 +91,9 @@ pok_ret_t pok_port_queueing_receive(const pok_port_id_t id, uint64_t timeout,
   while (pok_ports[id].empty == TRUE) {
     if (timeout == 0) {
       pok_lockobj_unlock(&pok_ports[id].lock, NULL);
+#ifdef POK_NEEDS_DEBUG
+      printf("[Q_RECEIVE] Queue empty, returning ERRNO_EMPTY\n");
+#endif
       return POK_ERRNO_EMPTY;
     } else {
       ret = pok_lockobj_eventwait(&pok_ports[id].lock, timeout);

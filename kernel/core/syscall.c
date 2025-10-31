@@ -146,15 +146,56 @@ pok_ret_t pok_core_syscall(const pok_syscall_id_t syscall_id,
     return POK_ERRNO_OK;
 #endif
 
-  case POK_SYSCALL_THREAD_CREATE:
+  case POK_SYSCALL_THREAD_CREATE: {
     CHECK_PTR((void *)args->arg1, sizeof(uint32_t));
 
     CHECK_PTR((void *)args->arg2, sizeof(pok_thread_attr_t));
 
+    pok_thread_attr_t *attr_ptr =
+        (pok_thread_attr_t *)(args->arg2 + infos->base_addr);
+#ifdef POK_NEEDS_DEBUG
+    printf(
+        "[SYSCALL] THREAD_CREATE: arg2=0x%x, base_addr=0x%x, attr_ptr=0x%x\n",
+        args->arg2, infos->base_addr, (uint32_t)attr_ptr);
+
+    // Read period as uint32_t chunks (printf %x works, %02x doesn't)
+    uint32_t *struct_words = (uint32_t *)attr_ptr;
+    printf("[SYSCALL] Struct as uint32_t array:\n");
+    printf("  [0]=priority,affinity: %u\n", struct_words[0]);
+    printf("  [1]=entry pointer: %u\n", struct_words[1]);
+    printf("  [2]=period[31:0]: %u\n", struct_words[2]);
+    printf("  [3]=period[63:32]: %u\n", struct_words[3]);
+    printf("  [4]=deadline[31:0]: %u\n", struct_words[4]);
+    printf("  [5]=deadline[63:32]: %u\n", struct_words[5]);
+    // Check offsets
+    printf("[SYSCALL] offsetof(period) in kernel = %u\n",
+           (unsigned)__builtin_offsetof(pok_thread_attr_t, period));
+    printf("[SYSCALL] Direct read: attr_ptr->period = %lld (0x%llx)\n",
+           (long long)attr_ptr->period, (unsigned long long)attr_ptr->period);
+    // Try manual 64-bit read from offset 8
+    uint64_t *period_ptr = (uint64_t *)((uint8_t *)attr_ptr + 8);
+    printf("[SYSCALL] period_ptr address = 0x%x (aligned to 8? %s)\n",
+           (uint32_t)period_ptr,
+           ((uint32_t)period_ptr % 8 == 0) ? "YES" : "NO");
+    printf("[SYSCALL] Manual read from offset 8: *period_ptr = %lld (0x%llx)\n",
+           (long long)*period_ptr, (unsigned long long)*period_ptr);
+    // Try reading as two 32-bit values
+    uint32_t *words_at_8 = (uint32_t *)((uint8_t *)attr_ptr + 8);
+    printf("[SYSCALL] words_at_8[0] = %u (0x%x), words_at_8[1] = %u (0x%x)\n",
+           words_at_8[0], words_at_8[0], words_at_8[1], words_at_8[1]);
+    uint64_t reconstructed = ((uint64_t)words_at_8[1] << 32) | words_at_8[0];
+    printf("[SYSCALL] Reconstructed from 32-bit reads: %lld (0x%llx)\n",
+           (long long)reconstructed, (unsigned long long)reconstructed);
+    // Also check what struct_words says
+    printf("[SYSCALL] struct_words[2] (should be period low) = %u\n",
+           struct_words[2]);
+    printf("[SYSCALL] struct_words[3] (should be period high) = %u\n",
+           struct_words[3]);
+#endif
     return pok_partition_thread_create(
-        (uint32_t *)(args->arg1 + infos->base_addr),
-        (pok_thread_attr_t *)(args->arg2 + infos->base_addr),
+        (uint32_t *)(args->arg1 + infos->base_addr), attr_ptr,
         (uint8_t)infos->partition);
+  }
 
 #ifdef POK_NEEDS_THREAD_SLEEP
   case POK_SYSCALL_THREAD_SLEEP:
@@ -471,6 +512,8 @@ pok_ret_t pok_core_syscall(const pok_syscall_id_t syscall_id,
    * in kernel of partitions, calling the error handler.
    */
   default:
+    printf("[SYSCALL] Unknown syscall_id=%d from partition %d\n",
+           (int)syscall_id, (int)infos->partition);
     pok_error_declare(POK_ERROR_KIND_ILLEGAL_REQUEST);
     pok_sched_activate_error_thread();
     break;

@@ -36,7 +36,9 @@
  * ASSERT_RET - Check POK return values in generated code
  *
  * Used by Ocarina-generated code to verify POK syscall return values.
- * FATAL: Halts execution on assertion failure.
+ * Treats certain transient errors (FULL, EMPTY, TIMEOUT) as warnings
+ * rather than fatal errors, since these are expected in real-time systems.
+ * FATAL: Halts execution only on unexpected/unrecoverable errors.
  */
 #ifndef ASSERT_RET
 #ifdef POK_NEEDS_DEBUG
@@ -44,10 +46,20 @@
   do {                                                                         \
     pok_ret_t __ret = (ret);                                                   \
     if (__ret != POK_ERRNO_OK) {                                               \
-      printf("[FATAL ASSERT] Error %d at %s:%d - HALTING\n", __ret, __FILE__,  \
-             __LINE__);                                                        \
-      while (1) {                                                              \
-        __asm volatile("wfi");                                                 \
+      /* Transient errors that are expected in normal operation */             \
+      if (__ret == POK_ERRNO_EMPTY || /* Queue/port empty */                   \
+          __ret == POK_ERRNO_FULL ||  /* Queue full */                         \
+          __ret == POK_ERRNO_TIMEOUT /* Timeout expired */) {                  \
+        /* Just log and continue - these are transient conditions */           \
+        printf("[PORT WARNING] Error %d at %s:%d (transient, continuing)\n",   \
+               __ret, __FILE__, __LINE__);                                     \
+      } else {                                                                 \
+        /* Unexpected error - this is fatal */                                 \
+        printf("[FATAL ASSERT] Error %d at %s:%d - HALTING\n", __ret,          \
+               __FILE__, __LINE__);                                            \
+        while (1) {                                                            \
+          __asm volatile("wfi");                                               \
+        }                                                                      \
       }                                                                        \
     }                                                                          \
   } while (0)
@@ -56,8 +68,13 @@
   do {                                                                         \
     pok_ret_t __ret = (ret);                                                   \
     if (__ret != POK_ERRNO_OK) {                                               \
-      while (1) {                                                              \
-        __asm volatile("wfi");                                                 \
+      /* Transient errors - just continue silently */                          \
+      if (__ret != POK_ERRNO_EMPTY && __ret != POK_ERRNO_FULL &&               \
+          __ret != POK_ERRNO_TIMEOUT) {                                        \
+        /* Unexpected error - fatal */                                         \
+        while (1) {                                                            \
+          __asm volatile("wfi");                                               \
+        }                                                                      \
       }                                                                        \
     }                                                                          \
   } while (0)

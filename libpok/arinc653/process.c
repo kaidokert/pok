@@ -20,6 +20,7 @@
 #include <arinc653/process.h>
 #include <arinc653/types.h>
 #include <core/thread.h>
+#include <libc/stdio.h>
 #include <libc/string.h>
 
 uint32_t pok_arinc653_processes[POK_CONFIG_NB_THREADS];
@@ -101,6 +102,19 @@ void CREATE_PROCESS(PROCESS_ATTRIBUTE_TYPE *attributes,
   core_attr.time_capacity = attributes->TIME_CAPACITY;
   core_attr.stack_size = attributes->STACK_SIZE;
   core_attr.processor_affinity = 0;
+
+#ifdef POK_NEEDS_DEBUG
+  printf("[CREATE_PROCESS] Input PERIOD: %llu (0x%llx)\n",
+         (unsigned long long)attributes->PERIOD,
+         (unsigned long long)attributes->PERIOD);
+  printf("[CREATE_PROCESS] Copied period: %llu (0x%llx)\n",
+         (unsigned long long)core_attr.period,
+         (unsigned long long)core_attr.period);
+  printf("[CREATE_PROCESS] Input DEADLINE: %u\n", attributes->DEADLINE);
+  printf("[CREATE_PROCESS] Copied deadline: %llu (0x%llx)\n",
+         (unsigned long long)core_attr.deadline,
+         (unsigned long long)core_attr.deadline);
+#endif
 
   core_ret = pok_thread_create(&core_process_id, &core_attr);
   *return_code = core_ret;

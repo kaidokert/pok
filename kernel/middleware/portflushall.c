@@ -66,6 +66,10 @@ void pok_port_flush_partition(uint8_t pid) {
   uint8_t global_dest; /* recipient port, local id  */
   pok_port_size_t len;
 
+#ifdef POK_NEEDS_DEBUG
+  printf("[FLUSH_PARTITION] Flushing partition %u\n", pid);
+#endif
+
   nb = pok_ports_nb_ports_by_partition[pid];
 
   for (i = 0; i < nb; i++) {
@@ -84,6 +88,11 @@ void pok_port_flush_partition(uint8_t pid) {
     }
 
     len = pok_port_consumed_size(local);
+
+#ifdef POK_NEEDS_DEBUG
+    printf("[FLUSH_PART] partition=%u port=%u len=%u empty=%d\n", pid, local,
+           len, pok_ports[local].empty);
+#endif
 
     if (pok_port_get(local, pok_buffer_flush, len) != POK_ERRNO_OK) {
       continue;
@@ -104,6 +113,14 @@ void pok_port_flush_partition(uint8_t pid) {
       }
 
       pok_port_write(local_dest, pok_buffer_flush, len);
+
+#ifdef POK_NEEDS_DEBUG
+      if (len >= 4) {
+        uint32_t *val_ptr = (uint32_t *)pok_buffer_flush;
+        printf("[FLUSH_TRANSFER] src=%u dst=%u value=%u\n", local, local_dest,
+               *val_ptr);
+      }
+#endif
 
       pok_lockobj_eventbroadcast(&pok_ports[local_dest].lock);
       /*
@@ -127,6 +144,10 @@ void pok_port_flush_partition(uint8_t pid) {
  */
 void pok_port_flushall(void) {
   uint8_t p;
+#ifdef POK_NEEDS_DEBUG
+  printf("[FLUSH_ALL] Called, flushing %u partitions\n",
+         POK_CONFIG_NB_PARTITIONS);
+#endif
   for (p = 0; p < POK_CONFIG_NB_PARTITIONS; p++) {
     if ((pok_partitions[p].mode == POK_PARTITION_MODE_NORMAL) ||
         (pok_partitions[p].mode == POK_PARTITION_MODE_IDLE)) {

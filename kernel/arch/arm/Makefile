@@ -18,7 +18,8 @@ LO_OBJS=	arch.o \
 		timer.o \
 		multiprocessing.o \
 		smp_stubs.o \
-		arm_compat.o
+		arm_compat.o \
+		test_64bit.o
 
 ifdef BSP
 LO_DEPS=	$(OBJ_DIR)/$(BSP)/$(BSP).lo

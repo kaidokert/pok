@@ -17,6 +17,9 @@
 #include <arinc653/arincutils.h>
 #include <libc/string.h>
 
+/* Define the global array declared extern in arincutils.h */
+ARINC_ATTRIBUTE arinc_process_attribute[POK_CONFIG_NB_THREADS];
+
 /**
  * Simple function to check if the process exist
  * process_name => Name of the checked process

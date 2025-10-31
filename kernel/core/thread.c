@@ -204,18 +204,50 @@ pok_ret_t pok_partition_thread_create(uint32_t *thread_id,
     pok_threads[id].base_priority = attr->priority;
   }
 
-  if (attr->period > 0) {
-    pok_threads[id].period = attr->period;
-    pok_threads[id].next_activation = attr->period;
+  // FIX: On ARM, direct 64-bit reads from user space are broken
+  // We MUST read the period field as two 32-bit words and combine manually
+  // Direct 64-bit reads (attr->period) return corrupted values
+  uint32_t *period_words = (uint32_t *)&attr->period;
+  uint32_t period_low = period_words[0];
+  uint32_t period_high = period_words[1];
+
+  // CRITICAL FIX: Build the 64-bit value from the two halves
+  // This avoids the compiler bug with 64-bit reads from user pointers
+  uint64_t period_value = ((uint64_t)period_high << 32) | (uint64_t)period_low;
+
+  if (period_value > 0) {
+    pok_threads[id].period = (int64_t)period_value;
+    pok_threads[id].next_activation = period_value;
+#ifdef POK_NEEDS_DEBUG
+    printf("[THREAD_CREATE] thread %u: read period=%llu, stored period=%lld, "
+           "next_activation=%llu\n",
+           id, (unsigned long long)period_value,
+           (long long)pok_threads[id].period,
+           (unsigned long long)pok_threads[id].next_activation);
+#endif
   }
 
-  if (attr->deadline > 0) {
-    pok_threads[id].deadline = attr->deadline;
+  // FIX: Same fix for deadline (64-bit field)
+  uint32_t *deadline_words = (uint32_t *)&attr->deadline;
+  uint32_t deadline_low = deadline_words[0];
+  uint32_t deadline_high = deadline_words[1];
+  uint64_t deadline_value =
+      ((uint64_t)deadline_high << 32) | (uint64_t)deadline_low;
+
+  if (deadline_value > 0) {
+    pok_threads[id].deadline = deadline_value;
   }
 
-  if (attr->time_capacity > 0) {
-    pok_threads[id].time_capacity = attr->time_capacity;
-    pok_threads[id].remaining_time_capacity = attr->time_capacity;
+  // FIX: Same fix for time_capacity (64-bit field)
+  uint32_t *time_capacity_words = (uint32_t *)&attr->time_capacity;
+  uint32_t time_capacity_low = time_capacity_words[0];
+  uint32_t time_capacity_high = time_capacity_words[1];
+  uint64_t time_capacity_value =
+      ((uint64_t)time_capacity_high << 32) | (uint64_t)time_capacity_low;
+
+  if (time_capacity_value > 0) {
+    pok_threads[id].time_capacity = time_capacity_value;
+    pok_threads[id].remaining_time_capacity = time_capacity_value;
   } else {
     pok_threads[id].remaining_time_capacity = POK_THREAD_DEFAULT_TIME_CAPACITY;
     pok_threads[id].time_capacity = POK_THREAD_DEFAULT_TIME_CAPACITY;

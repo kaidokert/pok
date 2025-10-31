@@ -46,6 +46,28 @@
 /* External variables */
 extern uint8_t pok_current_partition;
 
+/* Debug ring buffer - viewable in GDB without SVC calls */
+#define DEBUG_RING_SIZE 256
+struct debug_entry {
+  uint32_t pc;
+  uint32_t syscall_id;
+  uint32_t arg1;
+  uint32_t psp;
+} __attribute__((aligned(4)));
+
+volatile struct debug_entry debug_ring[DEBUG_RING_SIZE] __attribute__((used));
+volatile uint32_t debug_ring_idx __attribute__((used)) = 0;
+
+static inline void log_syscall(uint32_t pc, uint32_t id, uint32_t arg1,
+                               uint32_t psp) {
+  uint32_t idx = debug_ring_idx;
+  debug_ring[idx].pc = pc;
+  debug_ring[idx].syscall_id = id;
+  debug_ring[idx].arg1 = arg1;
+  debug_ring[idx].psp = psp;
+  debug_ring_idx = (idx + 1) % DEBUG_RING_SIZE;
+}
+
 /* Constant for inline assembly access - marked 'used' for assembly reference */
 static const uint32_t __attribute__((used)) kernel_stack_threshold =
     KERNEL_STACK_THRESHOLD;
@@ -212,6 +234,12 @@ svc_handler_impl(uint32_t *frame) {
 
   /* Declare args pointer early so it can be used in debug code */
   pok_syscall_args_t *args = (pok_syscall_args_t *)vframe[1];
+
+  /* Log syscall to ring buffer - PC is in frame[6] (stacked PC from exception)
+   */
+  uint32_t psp_val;
+  __asm volatile("mrs %0, PSP" : "=r"(psp_val));
+  log_syscall(vframe[6], syscall_id, args ? args->arg1 : 0, psp_val);
 
   /* Memory barrier to ensure frame read completes before use */
   __asm volatile("" ::: "memory");

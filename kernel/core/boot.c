@@ -37,6 +37,20 @@
 void pok_boot() {
   pok_arch_init();
   pok_bsp_init();
+  /* Build epoch for tracking rebuilds */
+#ifndef BUILD_EPOCH
+#define BUILD_EPOCH "unknown"
+#endif
+#if defined(POK_NEEDS_DEBUG) || defined(POK_NEEDS_CONSOLE)
+  printf("=== POK KERNEL BUILD EPOCH: %s ===\n", BUILD_EPOCH);
+#endif
+
+#ifdef POK_ARCH_ARM
+  /* Test 64-bit operations to debug period corruption issue */
+  extern void test_64bit_operations(void);
+  test_64bit_operations();
+#endif
+
   pok_partition_init();
   pok_thread_init();
   pok_sched_init(); /* Initialize scheduler structures */

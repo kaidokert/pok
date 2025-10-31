@@ -24,19 +24,43 @@ extern uint8_t pok_ports_kind[POK_CONFIG_NB_PORTS];
 pok_ret_t pok_port_queueing_id(char *name, pok_port_id_t *id) {
   uint8_t i;
 
+#ifdef POK_NEEDS_DEBUG
+  printf("[PORT_QUEUEING_ID] Looking for port '%s'\n", name);
+#endif
+
   for (i = 0; i < POK_CONFIG_NB_PORTS; i++) {
+#ifdef POK_NEEDS_DEBUG
+    printf("[PORT_QUEUEING_ID] Checking port %d: name='%s' kind=%d\n", i,
+           pok_ports_names[i], pok_ports_kind[i]);
+#endif
     if ((strcmp(name, pok_ports_names[i]) == 0) &&
         (pok_ports_kind[i] == POK_PORT_KIND_QUEUEING)) {
 
+#ifdef POK_NEEDS_DEBUG
+      printf("[PORT_QUEUEING_ID] Found matching port %d\n", i);
+#endif
+
       if (!pok_own_port(POK_SCHED_CURRENT_PARTITION, i)) {
+#ifdef POK_NEEDS_DEBUG
+        printf("[PORT_QUEUEING_ID] Port %d not owned by partition %d\n", i,
+               POK_SCHED_CURRENT_PARTITION);
+#endif
         return POK_ERRNO_PORT;
       }
 
       *id = i;
 
+#ifdef POK_NEEDS_DEBUG
+      printf("[PORT_QUEUEING_ID] Success: port %d belongs to partition %d\n", i,
+             POK_SCHED_CURRENT_PARTITION);
+#endif
       return POK_ERRNO_OK;
     }
   }
+
+#ifdef POK_NEEDS_DEBUG
+  printf("[PORT_QUEUEING_ID] Port '%s' not found\n", name);
+#endif
   return POK_ERRNO_NOTFOUND;
 }
 #endif
